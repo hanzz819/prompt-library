@@ -77,13 +77,18 @@ the web manifest's icons.
 one-line or multi-line. **Save** puts it straight into the library — searchable,
 categorised and copyable immediately, on that device.
 
-Any prompt can be edited with the **✎** button in its detail pane. Editing one
-that is already committed does not touch `data/prompts.js`; it stores an
-override on that device, badged *edited on this device*, and deleting the
-override brings the committed version back.
+Any prompt can be edited or deleted with the **✎** button in its detail pane:
 
-Prompts written this way live in `localStorage` and are marked *not in git yet*.
-They exist only in that browser until you publish them.
+| | Effect |
+| --- | --- |
+| Edit a device-only prompt | changes it in place |
+| Edit a committed prompt | stores an override, badged *edited on this device* — `data/prompts.js` is untouched until you publish |
+| **Discard my edits** on an override | committed version comes back |
+| **Delete** a device-only prompt | gone immediately |
+| **Delete** a committed prompt | disappears here now, and is removed from `data/prompts.js` when you publish or push. **Undo** is in the publish panel until then |
+
+Everything written this way lives in `localStorage` and is counted by the badge
+on the publish button. It exists only in that browser until published.
 
 ### Getting them into git
 
@@ -97,12 +102,33 @@ publish panel, with two forms of the same thing:
 - **Just my additions** — only what that device added. Paste it above the
   closing `]);`.
 
-Then commit and push. When the repo catches up, delete the local copy — the
-committed version takes over and the badge clears.
+Then commit and push. Deletions can only be expressed by the whole-file form.
 
 Served from `<user>.github.io/<repo>/`, the panel also shows an **Edit on
-GitHub** link straight to `data/prompts.js` in the web editor, which is the
-practical way to publish from a phone.
+GitHub** link straight to `data/prompts.js` in the web editor.
+
+### Committing from the app
+
+The same panel has **Commit straight to GitHub from here** — it writes
+`data/prompts.js` through the GitHub Contents API and Pages redeploys on its
+own. This is the one-tap route from a phone.
+
+It needs a token, and that is a real trade-off worth understanding:
+
+- The token is kept in `localStorage` **in that browser only** and is sent only
+  to `api.github.com`. It is never committed and never leaves for anywhere else.
+- Anyone with access to that browser profile can read it. On a shared or public
+  machine, use **Edit on GitHub** instead.
+- Use a **fine-grained** token scoped to this single repository with
+  **Contents: Read and write** — nothing more — and set an expiry.
+  Create one at *Settings → Developer settings → Personal access tokens →
+  Fine-grained tokens*.
+- **Forget token** wipes it from the browser.
+
+After a successful commit the app treats what it just wrote as the new
+baseline, so the pending badge clears without a reload. If someone else changed
+the file in between, GitHub rejects the write with a conflict and the app says
+so rather than overwriting — reload and push again.
 
 ### By hand
 

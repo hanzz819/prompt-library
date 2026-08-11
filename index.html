@@ -116,6 +116,39 @@
     <div class="modal-body">
       <p class="modal-note" id="pubNote"></p>
       <div class="pub-list" id="pubList"></div>
+
+      <details class="push-box" id="pushBox">
+        <summary>Commit straight to GitHub from here</summary>
+        <div class="push-inner">
+          <p class="push-warn">
+            This needs a GitHub token, which is stored <b>in this browser only</b> and sent
+            only to api.github.com. Anyone using this browser profile can read it.
+            Create a <b>fine-grained</b> token scoped to this one repository with
+            <b>Contents: Read and write</b>, and give it an expiry —
+            <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">make one here</a>.
+            If you would rather not, use <b>Edit on GitHub</b> below instead.
+          </p>
+          <div class="row-2">
+            <label class="fld"><span>Owner</span><input id="ghOwner" type="text" autocomplete="off" spellcheck="false"></label>
+            <label class="fld"><span>Repository</span><input id="ghRepo" type="text" autocomplete="off" spellcheck="false"></label>
+          </div>
+          <div class="row-2">
+            <label class="fld"><span>Branch</span><input id="ghBranch" type="text" autocomplete="off" spellcheck="false"></label>
+            <label class="fld"><span>File path</span><input id="ghPath" type="text" autocomplete="off" spellcheck="false"></label>
+          </div>
+          <label class="fld"><span>Token</span>
+            <input id="ghToken" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…">
+          </label>
+          <label class="fld"><span>Commit message</span><input id="ghMsg" type="text"></label>
+          <div class="push-actions">
+            <button class="btn ghost danger" id="ghForget" hidden>Forget token</button>
+            <span class="foot-spacer"></span>
+            <button class="btn primary" id="ghPush">Commit and push</button>
+          </div>
+          <p class="push-status" id="ghStatus" role="status" aria-live="polite"></p>
+        </div>
+      </details>
+
       <div class="seg" role="tablist">
         <button class="seg-btn" id="segFull" role="tab" aria-selected="true">Whole prompts.js</button>
         <button class="seg-btn" id="segSnippet" role="tab" aria-selected="false">Just my additions</button>

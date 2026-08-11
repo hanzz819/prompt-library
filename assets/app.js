@@ -18,7 +18,10 @@
     values: 'promptlib.values',
     favs: 'promptlib.favs',
     theme: 'promptlib.theme',
-    local: 'promptlib.local'
+    local: 'promptlib.local',
+    removed: 'promptlib.removed',
+    gh: 'promptlib.gh',
+    token: 'promptlib.ghtoken'
   };
 
   function load(key, fallback) {
@@ -40,24 +43,29 @@
     favs: load(KEY.favs, []),
     theme: load(KEY.theme, 'auto'),
     local: load(KEY.local, []),
+    removed: load(KEY.removed, []),
     editingId: null,
     pubMode: 'full'
   };
 
   // Merge REPO + LOCAL into PROMPTS. Local entries either override a repo
-  // prompt of the same id (in place) or append as brand new ones.
+  // prompt of the same id (in place) or append as brand new ones. Ids in
+  // state.removed are dropped — a deletion that publishes as a real removal.
   function rebuild() {
     var overridden = {};
-    PROMPTS = REPO.map(function (p) {
+    PROMPTS = [];
+    REPO.forEach(function (p) {
+      if (isRemoved(p.id)) return;
       var loc = localById(p.id);
-      if (!loc) return p;
-      overridden[p.id] = true;
-      return mark(loc, true);
+      if (loc) { overridden[p.id] = true; PROMPTS.push(mark(loc, true)); }
+      else PROMPTS.push(p);
     });
     state.local.forEach(function (loc) {
-      if (!overridden[loc.id]) PROMPTS.push(mark(loc, false));
+      if (!overridden[loc.id] && !isRemoved(loc.id)) PROMPTS.push(mark(loc, false));
     });
   }
+
+  function isRemoved(id) { return state.removed.indexOf(id) > -1; }
 
   function mark(loc, isOverride) {
     var copy = {};
@@ -74,6 +82,7 @@
 
   function saveLocal() {
     save(KEY.local, state.local);
+    save(KEY.removed, state.removed);
     rebuild();
     updatePublishBadge();
   }
@@ -667,7 +676,15 @@
         'Use <b>Publish</b> in the toolbar when you want it committed to git.';
     }
 
-    $('#npDelete').hidden = !(prompt && prompt._local);
+    // Delete is available for every prompt. For a committed one it records a
+    // removal that takes effect when published, not a silent local hide.
+    var del = $('#npDelete');
+    del.hidden = !prompt;
+    if (prompt) {
+      del.textContent = prompt._local && !prompt._override ? 'Delete'
+        : prompt._override ? 'Discard my edits'
+        : 'Delete';
+    }
     renderFieldMeta();
     $('#modal').hidden = false;
     $('#npTitle').focus();
@@ -741,18 +758,66 @@
     toast(existing ? 'Prompt updated' : 'Prompt added');
   }
 
-  function deleteLocalPrompt(id) {
+  // One delete for all three cases: a device-only prompt, an override of a
+  // committed prompt, or a committed prompt itself.
+  function deletePrompt(id) {
     var loc = localById(id);
-    if (!loc) return;
-    var wasOverride = !!byIdIn(REPO, id);
-    state.local.splice(state.local.indexOf(loc), 1);
+    var inRepo = !!byIdIn(REPO, id);
+
+    if (loc && inRepo) {                       // discard the override only
+      state.local.splice(state.local.indexOf(loc), 1);
+      saveLocal();
+      closeModal();
+      renderCategories();
+      select(id);
+      toast('Your edits were discarded — showing the committed version');
+      return;
+    }
+
+    if (loc && !inRepo) {                      // device-only prompt, just drop it
+      state.local.splice(state.local.indexOf(loc), 1);
+      forgetValues(id);
+      saveLocal();
+      afterRemoval('Prompt deleted');
+      return;
+    }
+
+    if (inRepo) {                              // committed — needs publishing to take effect
+      var p = byId(id);
+      if (!window.confirm('Delete "' + (p ? p.title : id) + '"?\n\n' +
+          'It disappears here now, and is removed from data/prompts.js when you publish or push.')) return;
+      state.removed.push(id);
+      forgetValues(id);
+      saveLocal();
+      afterRemoval('Deleted — publish or push to remove it from git');
+    }
+  }
+
+  function forgetValues(id) {
     delete state.values[id];
     save(KEY.values, state.values);
-    saveLocal();
+    var f = state.favs.indexOf(id);
+    if (f > -1) { state.favs.splice(f, 1); save(KEY.favs, state.favs); }
+  }
+
+  function afterRemoval(msg) {
     closeModal();
+    state.selectedId = null;
     renderCategories();
-    if (wasOverride) { select(id); } else { state.selectedId = null; showList(); renderList(); renderDetail(); }
-    toast(wasOverride ? 'Override removed — showing the committed version' : 'Prompt deleted');
+    showList();
+    renderList();
+    renderDetail();
+    toast(msg);
+  }
+
+  function restoreRemoved(id) {
+    var i = state.removed.indexOf(id);
+    if (i > -1) state.removed.splice(i, 1);
+    saveLocal();
+    renderCategories();
+    renderList();
+    renderPublish();
+    toast('Restored');
   }
 
   function byIdIn(list, id) {
@@ -841,16 +906,16 @@
     return 'https://github.com/' + m[1] + '/' + repo + '/edit/main/data/prompts.js';
   }
 
-  function localCount() {
-    return PROMPTS.filter(function (p) { return p._local; }).length;
+  function pendingCount() {
+    return PROMPTS.filter(function (p) { return p._local; }).length + state.removed.length;
   }
 
   function updatePublishBadge() {
-    var n = localCount(), el = $('#publishCount');
+    var n = pendingCount(), el = $('#publishCount');
     el.textContent = n;
     el.hidden = n === 0;
     $('#publishBtn').title = n
-      ? n + ' prompt' + (n === 1 ? '' : 's') + ' on this device only — publish to git'
+      ? n + ' unpublished change' + (n === 1 ? '' : 's') + ' on this device'
       : 'Everything here is already in git';
   }
 
@@ -862,32 +927,186 @@
   function renderPublish() {
     var locals = PROMPTS.filter(function (p) { return p._local; });
     var gh = githubEditUrl();
+    var pending = pendingCount();
 
-    $('#pubNote').innerHTML = locals.length
-      ? 'These prompts live in this browser only. Get them into <code>data/prompts.js</code>, ' +
-        'commit, and every device picks them up.'
-      : 'Nothing new on this device — the library matches <code>data/prompts.js</code>. ' +
-        'You can still export the file below.';
+    $('#pubNote').innerHTML = pending
+      ? 'These changes live in this browser only. Get them into <code>data/prompts.js</code> ' +
+        'and every device picks them up on the next load.'
+      : 'Nothing pending — the library matches <code>data/prompts.js</code>. ' +
+        'You can still export or re-push the file below.';
 
-    $('#pubList').innerHTML = locals.length
-      ? locals.map(function (p) {
-          return '<div class="pub-item"><span class="tag ' + (p._override ? 'warn-tag' : 'cat-tag') + '">' +
-            (p._override ? 'override' : 'new') + '</span><span>' + esc(p.title) + '</span></div>';
-        }).join('')
-      : '';
+    var rows = locals.map(function (p) {
+      return '<div class="pub-item"><span class="tag ' + (p._override ? 'warn-tag' : 'cat-tag') + '">' +
+        (p._override ? 'edited' : 'new') + '</span><span class="pub-name">' + esc(p.title) + '</span></div>';
+    });
+    state.removed.forEach(function (id) {
+      var was = byIdIn(REPO, id);
+      rows.push('<div class="pub-item"><span class="tag warn-tag">deleted</span>' +
+        '<span class="pub-name">' + esc(was ? was.title : id) + '</span>' +
+        '<button class="link-btn" data-restore="' + esc(id) + '">Undo</button></div>');
+    });
+    $('#pubList').innerHTML = rows.join('');
 
     var full = state.pubMode === 'full';
     $('#segFull').setAttribute('aria-selected', full ? 'true' : 'false');
     $('#segSnippet').setAttribute('aria-selected', full ? 'false' : 'true');
     $('#segNote').innerHTML = full
       ? 'The complete file, every prompt included. <b>Replace</b> <code>data/prompts.js</code> with this.'
-      : 'Only what this device added. <b>Paste</b> it just above the closing <code>]);</code> of <code>data/prompts.js</code>.';
+      : 'Only what this device added. <b>Paste</b> it just above the closing <code>]);</code>.' +
+        (state.removed.length ? ' <b>Deletions are not in this mode</b> — use the whole file for those.' : '');
 
-    $('#pubOut').value = full ? buildFullFile() : (buildAdditions() || '(nothing new on this device)');
+    $('#pubOut').value = full ? buildFullFile() : (buildAdditions() || '(nothing added on this device)');
     $('#pubDownload').hidden = !full;
 
     var a = $('#pubGithub');
     if (gh) { a.href = gh; a.hidden = false; } else { a.hidden = true; }
+
+    renderPushForm();
+  }
+
+  /* --------------------------- push to GitHub --------------------------- */
+
+  function ghConfig() {
+    var saved = load(KEY.gh, null);
+    if (saved && saved.owner) return saved;
+    var m = location.hostname.match(/^([^.]+)\.github\.io$/);
+    return {
+      owner: m ? m[1] : '',
+      repo: m ? (location.pathname.split('/').filter(Boolean)[0] || '') : '',
+      branch: 'main',
+      path: 'data/prompts.js'
+    };
+  }
+
+  function readPushForm() {
+    var cfg = {
+      owner: $('#ghOwner').value.trim(),
+      repo: $('#ghRepo').value.trim(),
+      branch: $('#ghBranch').value.trim() || 'main',
+      path: $('#ghPath').value.trim() || 'data/prompts.js'
+    };
+    save(KEY.gh, cfg);
+    return cfg;
+  }
+
+  function renderPushForm() {
+    var cfg = ghConfig();
+    $('#ghOwner').value = cfg.owner;
+    $('#ghRepo').value = cfg.repo;
+    $('#ghBranch').value = cfg.branch;
+    $('#ghPath').value = cfg.path;
+
+    var hasToken = !!load(KEY.token, '');
+    $('#ghToken').placeholder = hasToken ? '•••••••• saved in this browser' : 'github_pat_…';
+    $('#ghForget').hidden = !hasToken;
+
+    // refresh the suggestion unless it has been edited by hand
+    var msg = $('#ghMsg');
+    if (!msg.value || msg.value.indexOf('Update prompt library') === 0) {
+      var n = pendingCount();
+      msg.value = n ? 'Update prompt library (' + n + ' change' + (n === 1 ? '' : 's') + ')'
+                    : 'Update prompt library';
+    }
+  }
+
+  function pushStatus(msg, kind) {
+    var el = $('#ghStatus');
+    el.textContent = msg;
+    el.className = 'push-status' + (kind ? ' ' + kind : '');
+  }
+
+  // UTF-8 safe base64 — prompt bodies contain smart quotes and em dashes.
+  function toBase64(str) {
+    var bytes = new TextEncoder().encode(str), bin = '';
+    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  }
+
+  function ghApi(path, method, body) {
+    var headers = {
+      'Accept': 'application/vnd.github+json',
+      'Authorization': 'Bearer ' + load(KEY.token, ''),
+      'X-GitHub-Api-Version': '2022-11-28'
+    };
+    if (body) headers['Content-Type'] = 'application/json';
+    return fetch('https://api.github.com' + path, {
+      method: method || 'GET',
+      headers: headers,
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (json) {
+        return { ok: res.ok, status: res.status, json: json };
+      });
+    });
+  }
+
+  function ghError(r) {
+    if (r.status === 401) return 'Token rejected — it may be wrong or expired.';
+    if (r.status === 403) return 'Token lacks permission — it needs Contents: Read and write on this repo.';
+    if (r.status === 404) return 'Repo, branch or path not found, or the token cannot see this repo.';
+    if (r.status === 409) return 'The file changed on GitHub since this page loaded. Reload, then push again.';
+    if (r.status === 422) return 'GitHub rejected the commit: ' + (r.json.message || 'unprocessable');
+    return 'GitHub returned ' + r.status + (r.json.message ? ' — ' + r.json.message : '');
+  }
+
+  function pushToGitHub() {
+    var token = ($('#ghToken').value || '').trim();
+    if (token) { save(KEY.token, token); $('#ghToken').value = ''; renderPushForm(); }
+    if (!load(KEY.token, '')) { pushStatus('Add a token first.', 'bad'); $('#ghToken').focus(); return; }
+
+    var cfg = readPushForm();
+    if (!cfg.owner || !cfg.repo) { pushStatus('Owner and repository are required.', 'bad'); return; }
+
+    var content = buildFullFile();
+    var message = $('#ghMsg').value.trim() || 'Update prompt library';
+    var base = '/repos/' + cfg.owner + '/' + cfg.repo + '/contents/' + cfg.path;
+
+    $('#ghPush').disabled = true;
+    pushStatus('Reading the current file…');
+
+    ghApi(base + '?ref=' + encodeURIComponent(cfg.branch))
+      .then(function (r) {
+        if (!r.ok && r.status !== 404) throw new Error(ghError(r));
+        pushStatus('Committing…');
+        return ghApi(base, 'PUT', {
+          message: message,
+          content: toBase64(content),
+          branch: cfg.branch,
+          sha: r.ok ? r.json.sha : undefined
+        });
+      })
+      .then(function (r) {
+        if (!r.ok) throw new Error(ghError(r));
+        var sha = (r.json.commit && r.json.commit.sha || '').slice(0, 7);
+        adoptPushedState();
+        pushStatus('✓ Committed ' + sha + '. Pages redeploys in about a minute.', 'good');
+        toast('Pushed to GitHub');
+      })
+      .catch(function (e) {
+        pushStatus('✗ ' + e.message, 'bad');
+      })
+      .then(function () { $('#ghPush').disabled = false; });
+  }
+
+  // After a successful commit the remote file is exactly what we just built,
+  // so the merged view becomes the new baseline and nothing stays pending.
+  function adoptPushedState() {
+    REPO = PROMPTS.map(plain);
+    state.local = [];
+    state.removed = [];
+    saveLocal();
+    renderCategories();
+    renderList();
+    renderDetail();
+    renderPublish();
+  }
+
+  function plain(p) {
+    var out = {};
+    for (var k in p) {
+      if (Object.prototype.hasOwnProperty.call(p, k) && k.charAt(0) !== '_') out[k] = p[k];
+    }
+    return out;
   }
 
   function downloadFile(name, text) {
@@ -950,12 +1169,21 @@
     $('#npBody').addEventListener('input', renderFieldMeta);
     $('#npSave').onclick = saveEditor;
     $('#npDelete').onclick = function () {
-      if (state.editingId) deleteLocalPrompt(state.editingId);
+      if (state.editingId) deletePrompt(state.editingId);
     };
 
     $('#publish').addEventListener('click', function (e) {
-      if (e.target.getAttribute('data-close')) $('#publish').hidden = true;
+      if (e.target.getAttribute('data-close')) { $('#publish').hidden = true; return; }
+      var restore = e.target.getAttribute && e.target.getAttribute('data-restore');
+      if (restore) restoreRemoved(restore);
     });
+    $('#ghPush').onclick = pushToGitHub;
+    $('#ghForget').onclick = function () {
+      try { localStorage.removeItem(KEY.token); } catch (err) {}
+      $('#ghToken').value = '';
+      renderPushForm();
+      pushStatus('Token removed from this browser.');
+    };
     $('#segFull').onclick = function () { state.pubMode = 'full'; renderPublish(); };
     $('#segSnippet').onclick = function () { state.pubMode = 'snippet'; renderPublish(); };
     $('#pubCopy').onclick = function (e) { doCopy($('#pubOut').value, e.currentTarget, null); };
