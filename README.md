@@ -7,6 +7,7 @@ Plain HTML/CSS/JS — no build step, no dependencies, no server code.
 - **Fill-in fields** — anything written `[IN BRACKETS]` becomes an input; values are remembered per prompt on that device
 - **One-tap copy** — copy the filled prompt from the card or the detail pane, with a "copy template" option that leaves the brackets in
 - **Multi-device** — responsive down to phone width, installable to a home screen, works offline after the first visit
+- **Write prompts in the app** — a real editor with per-field labels and types; new prompts work immediately, then publish them into `data/prompts.js` when you want them permanent
 - **Git is the database** — prompts are one JS file of plain objects; edit, commit, push, pull
 
 ## Run it
@@ -69,13 +70,45 @@ the web manifest's icons.
 
 ## Add or edit a prompt
 
-1. Open `data/prompts.js`
-2. Copy an existing object, change the fields, give it a unique `id`
-3. Save, commit, push
+### In the app
 
-The **+** button in the app is a shortcut for step 2 — fill in the form, copy
-the generated snippet, paste it into `data/prompts.js`. It never writes to the
-repo itself, so nothing changes until you commit.
+**+** in the toolbar opens the editor. Write the prompt, and every
+`[BRACKETED]` token in the body turns into a field you can label and set to
+one-line or multi-line. **Save** puts it straight into the library — searchable,
+categorised and copyable immediately, on that device.
+
+Any prompt can be edited with the **✎** button in its detail pane. Editing one
+that is already committed does not touch `data/prompts.js`; it stores an
+override on that device, badged *edited on this device*, and deleting the
+override brings the committed version back.
+
+Prompts written this way live in `localStorage` and are marked *not in git yet*.
+They exist only in that browser until you publish them.
+
+### Getting them into git
+
+**↑** in the toolbar (badged with how many prompts are device-only) opens the
+publish panel, with two forms of the same thing:
+
+- **Whole prompts.js** — the complete regenerated file. Download it and replace
+  `data/prompts.js`, or copy it into the GitHub web editor. Note this rewrites
+  the file from the in-memory objects, so hand-written comments between prompts
+  are not preserved.
+- **Just my additions** — only what that device added. Paste it above the
+  closing `]);`.
+
+Then commit and push. When the repo catches up, delete the local copy — the
+committed version takes over and the badge clears.
+
+Served from `<user>.github.io/<repo>/`, the panel also shows an **Edit on
+GitHub** link straight to `data/prompts.js` in the web editor, which is the
+practical way to publish from a phone.
+
+### By hand
+
+Open `data/prompts.js`, copy an existing object, change it, give it a unique
+`id`, then commit. The in-app editor is a convenience, not a requirement — the
+file is always the source of truth.
 
 ### The shape of a prompt
 

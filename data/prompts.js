@@ -393,6 +393,172 @@ Report unresolved issues, whether they block completion, and any owner decision 
 State what is complete, the next closest-to-finished opportunity, and its single blocking item.
 
 Do not use the words “complete,” “verified,” or “ready” unless the evidence supports them.`
+},
+
+{
+  id: 'resumable-build-session-wrap-up',
+  title: 'Resumable Build Session - Wrap Up',
+  category: 'Handoff',
+  tags: [],
+  description: `You are continuing work from a previous session. The previous session may have stopped mid-step, made partial edits, or left the repository in an uncertain state.
+
+Treat the repository and git state as authoritative. Treat this handoff and previous conversation as context only. Do not assume that any claimed step was completed until you verify it on disk.`,
+  fields: {
+    'PASTE THE ORIGINAL TASK': { label: 'Paste The Original Task', type: 'textarea' },
+    'PASTE THE SUCCESS CRITERIA': { label: 'Paste The Success Criteria', type: 'textarea' },
+    'PASTE THE APPROVAL OR WRITE “NONE”': { label: 'Paste The Approval Or Write “None”', type: 'textarea' },
+    'PASTE THE HANDOFF DETAILS OR WRITE “NONE”': { label: 'Paste The Handoff Details Or Write “None”', type: 'textarea' }
+  },
+  body: `## Task
+
+Original task:
+[PASTE THE ORIGINAL TASK]
+
+Success criteria:
+[PASTE THE SUCCESS CRITERIA]
+
+Owner approval:
+[PASTE THE APPROVAL OR WRITE “NONE”]
+
+Previous-session handoff:
+[PASTE THE HANDOFF DETAILS OR WRITE “NONE”]
+
+## Initial safety state
+
+Begin with inspection only.
+
+Do not edit, create, delete, move, rename, reset, restore, stage, commit, deploy, send, migrate, repair, or run destructive commands.
+
+Do not run live commands.
+
+Run only safe, read-only inspection commands:
+
+- \`git status --short\`
+- \`git branch --show-current\`
+- \`git worktree list\`
+- \`git diff --stat\`
+- \`git diff\`
+- \`git diff --cached\`
+- Relevant read-only searches and file inspection
+
+Never run:
+
+- \`git add -A\`
+- \`git add .\`
+- Force-push or history rewriting
+- Live \`railway run\` commands
+- Production or staging migrations
+- Database reset, drop, repair, or deletion
+- Live sending or attachment commands
+- Credential cleanup or deletion
+
+## Phase 1 — Reconstruct actual state
+
+Determine and report:
+
+1. Current branch and worktree.
+2. Whether the worktree is clean, partially modified, or conflicted.
+3. Every modified, untracked, staged, or deleted file.
+4. The last relevant commit.
+5. Whether the previous session appears to have completed, partially completed, or not started the task.
+6. Which changes belong to this task.
+7. Which changes appear unrelated or uncertain.
+8. Whether another worktree may contain related work.
+9. Whether any live or destructive action appears to have occurred.
+10. Whether the repository is safe to continue modifying.
+
+Inspect the relevant project sources of truth:
+
+- \`CLAUDE.md\`
+- \`ENVIRONMENT.md\`
+- \`project/plans/NEXT-BUILD-PHASES.md\`
+- \`project/plans/README.md\`
+- \`project/logs/decisions.md\`
+- Relevant architecture, skill, and integration documents
+
+Do not trust a document’s status statement without comparing it with the actual files, diff, commits, and tests.
+
+## Phase 2 — Reconcile the handoff
+
+Compare the previous-session handoff with the verified repository state.
+
+Return:
+
+### Handoff Claims Confirmed
+
+List claims that match the repository and git state.
+
+### Handoff Claims Not Confirmed
+
+List claims that are stale, incomplete, contradictory, or not evidenced.
+
+### Work Already Complete
+
+List each completed task item with evidence.
+
+### Work Partially Complete
+
+For each partially completed item:
+
+- What changed.
+- What remains.
+- Whether the partial change is safe to keep.
+- What verification is required.
+- Whether rollback or owner input is needed.
+
+### Unrelated or Suspicious Changes
+
+List changes that do not clearly belong to the approved task. Do not revert or delete them automatically.
+
+### Current Source-of-Truth Status
+
+Confirm the current home of:
+
+- Current build state.
+- Historical decisions.
+- Environment mechanisms.
+- Go-live blockers.
+- Detailed procedures.
+- Project commands.
+
+### Wiring Status
+
+For every file that may be changed:
+
+- Referenced by:
+- Points to:
+- References already updated:
+- References still stale:
+- Duplicate source of truth detected:
+
+## Phase 3 — Resume decision
+
+Do not edit yet.
+
+Based on the verified state, classify the session as one of:
+
+1. Safe to continue the approved task.
+2. Needs a revised plan.
+3. Blocked by a conflict or uncertain change.
+4. Requires owner approval.
+5. Complete pending verification only.
+
+Then provide the smallest safe resume plan.
+
+The resume plan must state:
+
+- Exact remaining steps.
+- Exact files allowed to change.
+- Files that must remain untouched.
+- Commands allowed before verification.
+- Commands that are live or destructive and therefore excluded.
+- Verification required after each step.
+- Whether \`NEXT-BUILD-PHASES.md\` must be updated.
+- Whether a decisions entry is required.
+
+End Phase 3 with:
+
+“Repository state reconstructed. No files were changed. Waiting for approval to resume.”`
 }
 
 ]);

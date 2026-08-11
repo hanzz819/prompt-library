@@ -35,7 +35,10 @@
 
   <div class="topbar-actions">
     <button class="icon-btn" id="favToggle" aria-pressed="false" title="Show favourites only">&#9734;</button>
-    <button class="icon-btn" id="newBtn" title="Add a new prompt">+</button>
+    <button class="icon-btn" id="newBtn" title="Write a new prompt">+</button>
+    <button class="icon-btn badge-host" id="publishBtn" title="Publish local prompts to git">
+      &#8593;<span class="badge" id="publishCount" hidden></span>
+    </button>
     <button class="icon-btn" id="themeBtn" title="Toggle theme">&#9681;</button>
   </div>
 </header>
@@ -66,31 +69,65 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<!-- new / edit prompt generator -->
+<!-- prompt editor -->
 <div class="modal" id="modal" hidden>
   <div class="modal-backdrop" data-close="1"></div>
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-head">
-      <h2 id="modalTitle">Add a prompt</h2>
+      <h2 id="modalTitle">Write a prompt</h2>
       <button class="icon-btn" data-close="1" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
-      <p class="modal-note">
-        Fill this in, copy the generated snippet, and paste it into <code>data/prompts.js</code>.
-        Commit the file and every device gets it on the next pull.
-      </p>
+      <p class="modal-note" id="editorNote"></p>
       <label class="fld"><span>Title</span><input id="npTitle" type="text" placeholder="Verify and close out"></label>
-      <label class="fld"><span>Category</span><input id="npCategory" type="text" list="catList" placeholder="Verify"></label>
+      <div class="row-2">
+        <label class="fld"><span>Category</span><input id="npCategory" type="text" list="catList" placeholder="Verify"></label>
+        <label class="fld"><span>Tags <em>(comma separated)</em></span><input id="npTags" type="text" placeholder="verification, close-out"></label>
+      </div>
       <datalist id="catList"></datalist>
-      <label class="fld"><span>Tags <em>(comma separated)</em></span><input id="npTags" type="text" placeholder="verification, close-out"></label>
-      <label class="fld"><span>Description</span><textarea id="npDesc" rows="2" placeholder="When to use this prompt."></textarea></label>
-      <label class="fld"><span>Prompt body <em>(wrap fill-ins in [BRACKETS])</em></span><textarea id="npBody" rows="10" placeholder="Do the thing.&#10;&#10;Task:&#10;[TASK]"></textarea></label>
-      <div class="detected" id="npDetected"></div>
-      <label class="fld"><span>Generated snippet</span><textarea id="npOut" rows="10" readonly></textarea></label>
+      <label class="fld">
+        <span>Description <em>— shown in the list, not part of the copied prompt</em></span>
+        <textarea id="npDesc" rows="2" placeholder="When to use this prompt."></textarea>
+      </label>
+      <label class="fld">
+        <span>Prompt body <em>— wrap fill-ins in [BRACKETS], uppercase</em></span>
+        <textarea id="npBody" rows="12" placeholder="Do the thing.&#10;&#10;Task:&#10;[TASK]"></textarea>
+      </label>
+      <div class="section-head"><h3 class="section-title">Fields detected in the body</h3></div>
+      <div class="fieldmeta" id="npFields"></div>
     </div>
     <div class="modal-foot">
-      <button class="btn ghost" data-close="1">Close</button>
-      <button class="btn primary" id="npCopy">Copy snippet</button>
+      <button class="btn ghost danger" id="npDelete" hidden>Delete</button>
+      <span class="foot-spacer"></span>
+      <button class="btn ghost" data-close="1">Cancel</button>
+      <button class="btn primary" id="npSave">Save prompt</button>
+    </div>
+  </div>
+</div>
+
+<!-- publish to git -->
+<div class="modal" id="publish" hidden>
+  <div class="modal-backdrop" data-close="1"></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="pubTitle">
+    <div class="modal-head">
+      <h2 id="pubTitle">Publish to git</h2>
+      <button class="icon-btn" data-close="1" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-note" id="pubNote"></p>
+      <div class="pub-list" id="pubList"></div>
+      <div class="seg" role="tablist">
+        <button class="seg-btn" id="segFull" role="tab" aria-selected="true">Whole prompts.js</button>
+        <button class="seg-btn" id="segSnippet" role="tab" aria-selected="false">Just my additions</button>
+      </div>
+      <p class="modal-note" id="segNote"></p>
+      <label class="fld"><span class="sr-only">Generated file</span><textarea id="pubOut" rows="12" readonly spellcheck="false"></textarea></label>
+    </div>
+    <div class="modal-foot pub-foot">
+      <a class="btn ghost" id="pubGithub" target="_blank" rel="noopener" hidden>Edit on GitHub</a>
+      <span class="foot-spacer"></span>
+      <button class="btn ghost" id="pubDownload">Download</button>
+      <button class="btn primary" id="pubCopy">Copy</button>
     </div>
   </div>
 </div>

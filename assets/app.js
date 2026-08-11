@@ -5,11 +5,21 @@
 (function () {
   'use strict';
 
-  var PROMPTS = (window.PROMPT_LIBRARY || []).slice();
+  // REPO = what is committed in data/prompts.js.
+  // LOCAL = prompts written in the app on this device, not yet in git.
+  // PROMPTS = the merge the UI actually renders; a local entry sharing an id
+  // with a repo prompt overrides it in place.
+  var REPO = (window.PROMPT_LIBRARY || []).slice();
+  var PROMPTS = [];
 
   /* ------------------------------ storage ------------------------------ */
 
-  var KEY = { values: 'promptlib.values', favs: 'promptlib.favs', theme: 'promptlib.theme' };
+  var KEY = {
+    values: 'promptlib.values',
+    favs: 'promptlib.favs',
+    theme: 'promptlib.theme',
+    local: 'promptlib.local'
+  };
 
   function load(key, fallback) {
     try {
@@ -28,8 +38,45 @@
     selectedId: null,
     values: load(KEY.values, {}),
     favs: load(KEY.favs, []),
-    theme: load(KEY.theme, 'auto')
+    theme: load(KEY.theme, 'auto'),
+    local: load(KEY.local, []),
+    editingId: null,
+    pubMode: 'full'
   };
+
+  // Merge REPO + LOCAL into PROMPTS. Local entries either override a repo
+  // prompt of the same id (in place) or append as brand new ones.
+  function rebuild() {
+    var overridden = {};
+    PROMPTS = REPO.map(function (p) {
+      var loc = localById(p.id);
+      if (!loc) return p;
+      overridden[p.id] = true;
+      return mark(loc, true);
+    });
+    state.local.forEach(function (loc) {
+      if (!overridden[loc.id]) PROMPTS.push(mark(loc, false));
+    });
+  }
+
+  function mark(loc, isOverride) {
+    var copy = {};
+    for (var k in loc) if (Object.prototype.hasOwnProperty.call(loc, k)) copy[k] = loc[k];
+    copy._local = true;
+    copy._override = isOverride;
+    return copy;
+  }
+
+  function localById(id) {
+    for (var i = 0; i < state.local.length; i++) if (state.local[i].id === id) return state.local[i];
+    return null;
+  }
+
+  function saveLocal() {
+    save(KEY.local, state.local);
+    rebuild();
+    updatePublishBadge();
+  }
 
   /* --------------------------- fill-in fields --------------------------- */
 
@@ -344,6 +391,7 @@
         '<div class="card-foot">' +
           '<span class="tag cat-tag">' + esc(p.category) + '</span>' +
           '<span class="tag fields-tag">' + fieldsLabel + '</span>' +
+          (p._local ? '<span class="tag local-tag">' + (p._override ? 'edited' : 'not in git') + '</span>' : '') +
         '</div>' +
         '<div class="card-actions">' +
           '<button class="icon-btn" data-act="fav" aria-pressed="' + (isFav(p.id) ? 'true' : 'false') +
@@ -380,9 +428,11 @@
     wrap.className = 'detail-inner';
 
     var head = '<div class="d-head"><h1 class="d-title">' + esc(p.title) + '</h1>' +
+      '<button class="icon-btn" id="dEdit" title="Edit this prompt">✎</button>' +
       '<button class="icon-btn" id="dFav" aria-pressed="' + (isFav(p.id) ? 'true' : 'false') +
       '" title="Favourite">' + (isFav(p.id) ? '★' : '☆') + '</button></div>' +
       '<div class="d-meta"><span class="tag cat-tag">' + esc(p.category) + '</span>' +
+      (p._local ? '<span class="tag local-tag">' + (p._override ? 'edited on this device' : 'not in git yet') + '</span>' : '') +
       (p.tags || []).map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') +
       '</div>' +
       (p.description ? '<p class="d-desc">' + esc(p.description) + '</p>' : '');
@@ -463,6 +513,7 @@
     updateProgress(p);
 
     wrap.querySelector('#dFav').onclick = function () { toggleFav(p.id); renderDetail(); renderList(); };
+    wrap.querySelector('#dEdit').onclick = function () { openEditor(p); };
     wrap.querySelector('#dCopy').onclick = function (e) { doCopy(fill(p), e.currentTarget, p); };
     if (wrap.querySelector('#dCopyRaw')) {
       wrap.querySelector('#dCopyRaw').onclick = function (e) { doCopy(p.body, e.currentTarget, null); };
@@ -563,61 +614,297 @@
     btn.title = 'Theme: ' + state.theme + ' (click to change)';
   }
 
-  /* -------------------------- new-prompt helper ------------------------- */
+  /* ---------------------------- prompt editor --------------------------- */
 
   function slugify(s) {
     return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'untitled';
   }
 
-  function buildSnippet() {
-    var title = $('#npTitle').value.trim();
-    var category = $('#npCategory').value.trim() || 'General';
-    var tags = $('#npTags').value.split(',').map(function (t) { return t.trim(); }).filter(Boolean);
-    var desc = $('#npDesc').value.trim();
-    var body = $('#npBody').value;
+  function uniqueId(base, keepId) {
+    var id = base, n = 2;
+    while (byId(id) && id !== keepId) id = base + '-' + (n++);
+    return id;
+  }
 
+  function detectSlots(body) {
     var found = [], seen = {}, m, re = slotRe();
     while ((m = re.exec(body)) !== null) {
       if (isSlot(m[1]) && !seen[m[1]]) { seen[m[1]] = 1; found.push(m[1]); }
     }
-
-    $('#npDetected').innerHTML = found.length
-      ? '<span>Detected fields:</span>' + found.map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('')
-      : '<span>No fields detected — wrap fill-ins in [BRACKETS], uppercase.</span>';
-
-    var q = function (s) { return "'" + String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'"; };
-    var safeBody = body.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
-
-    return '{\n' +
-      '  id: ' + q(slugify(title)) + ',\n' +
-      '  title: ' + q(title) + ',\n' +
-      '  category: ' + q(category) + ',\n' +
-      '  tags: [' + tags.map(q).join(', ') + '],\n' +
-      '  description: ' + q(desc) + ',\n' +
-      (found.length
-        ? '  fields: {\n' + found.map(function (t) {
-            return '    ' + q(t) + ': { label: ' + q(titleCase(t)) + ', type: ' +
-              (t.length > 14 ? "'textarea'" : "'text'") + ' }';
-          }).join(',\n') + '\n  },\n'
-        : '') +
-      '  body: `' + safeBody + '`\n' +
-      '},';
+    return found;
   }
 
-  function refreshSnippet() { $('#npOut').value = buildSnippet(); }
+  var editorMeta = {};
 
-  function openModal(prompt) {
-    $('#modalTitle').textContent = prompt ? 'Duplicate / edit prompt' : 'Add a prompt';
+  function openEditor(prompt) {
+    state.editingId = prompt ? prompt.id : null;
+    editorMeta = {};
+    if (prompt && prompt.fields) {
+      for (var k in prompt.fields) {
+        if (Object.prototype.hasOwnProperty.call(prompt.fields, k)) {
+          var src = prompt.fields[k], copy = {};
+          for (var j in src) if (Object.prototype.hasOwnProperty.call(src, j)) copy[j] = src[j];
+          editorMeta[k] = copy;
+        }
+      }
+    }
+
+    $('#modalTitle').textContent = prompt ? 'Edit prompt' : 'Write a prompt';
     $('#npTitle').value = prompt ? prompt.title : '';
     $('#npCategory').value = prompt ? prompt.category : '';
     $('#npTags').value = prompt ? (prompt.tags || []).join(', ') : '';
     $('#npDesc').value = prompt ? (prompt.description || '') : '';
     $('#npBody').value = prompt ? prompt.body : '';
-    refreshSnippet();
+
+    var note = $('#editorNote');
+    if (prompt && !prompt._local) {
+      note.innerHTML = 'This prompt is committed in <code>data/prompts.js</code>. Saving keeps the ' +
+        'file untouched and stores an override on this device — publish it to make the change permanent.';
+    } else if (prompt) {
+      note.innerHTML = 'Saved on this device only. Use <b>Publish</b> in the toolbar to get it into git.';
+    } else {
+      note.innerHTML = 'Saves straight into the library on this device — usable immediately. ' +
+        'Use <b>Publish</b> in the toolbar when you want it committed to git.';
+    }
+
+    $('#npDelete').hidden = !(prompt && prompt._local);
+    renderFieldMeta();
     $('#modal').hidden = false;
     $('#npTitle').focus();
   }
-  function closeModal() { $('#modal').hidden = true; }
+
+  function renderFieldMeta() {
+    var host = $('#npFields');
+    var slots = detectSlots($('#npBody').value);
+    host.innerHTML = '';
+
+    if (!slots.length) {
+      host.innerHTML = '<p class="fieldmeta-empty">No fields yet — anything you write as ' +
+        '<code>[LIKE THIS]</code> in the body becomes an input.</p>';
+      return;
+    }
+
+    slots.forEach(function (token) {
+      if (!editorMeta[token]) {
+        editorMeta[token] = { label: titleCase(token), type: token.length > 14 ? 'textarea' : 'text' };
+      }
+      var meta = editorMeta[token];
+
+      var row = document.createElement('div');
+      row.className = 'fieldmeta-row';
+      row.innerHTML =
+        '<code class="fieldmeta-token">[' + esc(token) + ']</code>' +
+        '<input type="text" class="fieldmeta-label" value="' + esc(meta.label || '') + '" placeholder="Label">' +
+        '<select class="fieldmeta-type">' +
+          '<option value="text">one line</option>' +
+          '<option value="textarea">multi-line</option>' +
+        '</select>';
+
+      var sel = row.querySelector('select');
+      sel.value = meta.type === 'textarea' ? 'textarea' : 'text';
+      sel.addEventListener('change', function () { meta.type = sel.value; });
+      row.querySelector('input').addEventListener('input', function (e) { meta.label = e.target.value; });
+
+      host.appendChild(row);
+    });
+  }
+
+  function saveEditor() {
+    var title = $('#npTitle').value.trim();
+    if (!title) { $('#npTitle').focus(); toast('A title is required'); return; }
+
+    var body = $('#npBody').value;
+    if (!body.trim()) { $('#npBody').focus(); toast('The prompt body is empty'); return; }
+
+    var slots = detectSlots(body);
+    var fields = {};
+    slots.forEach(function (t) { if (editorMeta[t]) fields[t] = editorMeta[t]; });
+
+    var prompt = {
+      id: state.editingId || uniqueId(slugify(title), null),
+      title: title,
+      category: $('#npCategory').value.trim() || 'General',
+      tags: $('#npTags').value.split(',').map(function (t) { return t.trim(); }).filter(Boolean),
+      description: $('#npDesc').value.trim(),
+      body: body
+    };
+    if (slots.length) prompt.fields = fields;
+
+    var existing = localById(prompt.id);
+    if (existing) state.local[state.local.indexOf(existing)] = prompt;
+    else state.local.push(prompt);
+
+    saveLocal();
+    closeModal();
+    renderCategories();
+    select(prompt.id);
+    toast(existing ? 'Prompt updated' : 'Prompt added');
+  }
+
+  function deleteLocalPrompt(id) {
+    var loc = localById(id);
+    if (!loc) return;
+    var wasOverride = !!byIdIn(REPO, id);
+    state.local.splice(state.local.indexOf(loc), 1);
+    delete state.values[id];
+    save(KEY.values, state.values);
+    saveLocal();
+    closeModal();
+    renderCategories();
+    if (wasOverride) { select(id); } else { state.selectedId = null; showList(); renderList(); renderDetail(); }
+    toast(wasOverride ? 'Override removed — showing the committed version' : 'Prompt deleted');
+  }
+
+  function byIdIn(list, id) {
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return null;
+  }
+
+  function closeModal() { $('#modal').hidden = true; state.editingId = null; }
+
+  /* ------------------------- publish (git export) ----------------------- */
+
+  var FILE_HEADER = [
+    '/* ---------------------------------------------------------------------------',
+    '   THE LIBRARY LIVES HERE.',
+    '',
+    '   Add a prompt = add an object to the array below, save, commit, push.',
+    '   Every device gets it on the next load. No build step, no database.',
+    '',
+    '   Fields (fill-in-the-blanks) are written [IN SQUARE BRACKETS] inside `body`.',
+    '   They are detected automatically; the optional `fields` map just gives them',
+    '   nicer labels, input types and defaults.',
+    '',
+    '   Careful: `body` is a JS template literal, so a literal backtick must be',
+    '   written \\` and a literal ${ must be written \\${.',
+    '--------------------------------------------------------------------------- */',
+    '',
+    'window.PROMPT_LIBRARY = (window.PROMPT_LIBRARY || []).concat([',
+    ''
+  ].join('\n');
+
+  function jsStr(s) {
+    return "'" + String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n') + "'";
+  }
+  function jsTmpl(s) {
+    return '`' + String(s).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${') + '`';
+  }
+
+  function serializePrompt(p) {
+    var out = ['{'];
+    out.push('  id: ' + jsStr(p.id) + ',');
+    out.push('  title: ' + jsStr(p.title) + ',');
+    out.push('  category: ' + jsStr(p.category) + ',');
+    out.push('  tags: [' + (p.tags || []).map(jsStr).join(', ') + '],');
+    if (p.description) {
+      // a template literal so multi-line descriptions stay valid and readable
+      out.push('  description: ' + (p.description.indexOf('\n') > -1 ? jsTmpl(p.description) : jsStr(p.description)) + ',');
+    }
+    var keys = p.fields ? Object.keys(p.fields) : [];
+    if (keys.length) {
+      out.push('  fields: {');
+      out.push(keys.map(function (k) {
+        var f = p.fields[k], parts = [];
+        if (f.label) parts.push('label: ' + jsStr(f.label));
+        if (f.type) parts.push('type: ' + jsStr(f.type));
+        if (f.hint) parts.push('hint: ' + jsStr(f.hint));
+        if (f.options) parts.push('options: [' + f.options.map(jsStr).join(', ') + ']');
+        if (f.rows) parts.push('rows: ' + f.rows);
+        if (f['default'] != null && f['default'] !== '') parts.push('default: ' + jsStr(f['default']));
+        return '    ' + jsStr(k) + ': { ' + parts.join(', ') + ' }';
+      }).join(',\n'));
+      out.push('  },');
+    }
+    out.push('  body: ' + jsTmpl(p.body));
+    out.push('}');
+    return out.join('\n');
+  }
+
+  function buildFullFile() {
+    return FILE_HEADER + '\n' +
+      PROMPTS.map(serializePrompt).join(',\n\n') +
+      '\n\n]);\n';
+  }
+
+  function buildAdditions() {
+    var locals = PROMPTS.filter(function (p) { return p._local; });
+    if (!locals.length) return '';
+    return locals.map(serializePrompt).join(',\n\n') + ',';
+  }
+
+  // Turn https://user.github.io/repo/ into the repo's file editor, when hosted there.
+  function githubEditUrl() {
+    var m = location.hostname.match(/^([^.]+)\.github\.io$/);
+    if (!m) return null;
+    var repo = location.pathname.split('/').filter(Boolean)[0];
+    if (!repo) return null;
+    return 'https://github.com/' + m[1] + '/' + repo + '/edit/main/data/prompts.js';
+  }
+
+  function localCount() {
+    return PROMPTS.filter(function (p) { return p._local; }).length;
+  }
+
+  function updatePublishBadge() {
+    var n = localCount(), el = $('#publishCount');
+    el.textContent = n;
+    el.hidden = n === 0;
+    $('#publishBtn').title = n
+      ? n + ' prompt' + (n === 1 ? '' : 's') + ' on this device only — publish to git'
+      : 'Everything here is already in git';
+  }
+
+  function openPublish() {
+    renderPublish();
+    $('#publish').hidden = false;
+  }
+
+  function renderPublish() {
+    var locals = PROMPTS.filter(function (p) { return p._local; });
+    var gh = githubEditUrl();
+
+    $('#pubNote').innerHTML = locals.length
+      ? 'These prompts live in this browser only. Get them into <code>data/prompts.js</code>, ' +
+        'commit, and every device picks them up.'
+      : 'Nothing new on this device — the library matches <code>data/prompts.js</code>. ' +
+        'You can still export the file below.';
+
+    $('#pubList').innerHTML = locals.length
+      ? locals.map(function (p) {
+          return '<div class="pub-item"><span class="tag ' + (p._override ? 'warn-tag' : 'cat-tag') + '">' +
+            (p._override ? 'override' : 'new') + '</span><span>' + esc(p.title) + '</span></div>';
+        }).join('')
+      : '';
+
+    var full = state.pubMode === 'full';
+    $('#segFull').setAttribute('aria-selected', full ? 'true' : 'false');
+    $('#segSnippet').setAttribute('aria-selected', full ? 'false' : 'true');
+    $('#segNote').innerHTML = full
+      ? 'The complete file, every prompt included. <b>Replace</b> <code>data/prompts.js</code> with this.'
+      : 'Only what this device added. <b>Paste</b> it just above the closing <code>]);</code> of <code>data/prompts.js</code>.';
+
+    $('#pubOut').value = full ? buildFullFile() : (buildAdditions() || '(nothing new on this device)');
+    $('#pubDownload').hidden = !full;
+
+    var a = $('#pubGithub');
+    if (gh) { a.href = gh; a.hidden = false; } else { a.hidden = true; }
+  }
+
+  function downloadFile(name, text) {
+    try {
+      var blob = new Blob([text], { type: 'text/javascript' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      toast('Downloaded ' + name);
+    } catch (e) {
+      manualCopyFallback(text);
+    }
+  }
 
   /* ------------------------------- events ------------------------------- */
 
@@ -654,18 +941,25 @@
     };
 
     $('#backBtn').onclick = showList;
-    $('#newBtn').onclick = function () { openModal(null); };
+    $('#newBtn').onclick = function () { openEditor(null); };
+    $('#publishBtn').onclick = openPublish;
 
     $('#modal').addEventListener('click', function (e) {
       if (e.target.getAttribute('data-close')) closeModal();
     });
-    ['npTitle', 'npCategory', 'npTags', 'npDesc', 'npBody'].forEach(function (id) {
-      document.getElementById(id).addEventListener('input', refreshSnippet);
-    });
-    $('#npCopy').onclick = function (e) {
-      refreshSnippet();
-      doCopy($('#npOut').value, e.currentTarget, null);
+    $('#npBody').addEventListener('input', renderFieldMeta);
+    $('#npSave').onclick = saveEditor;
+    $('#npDelete').onclick = function () {
+      if (state.editingId) deleteLocalPrompt(state.editingId);
     };
+
+    $('#publish').addEventListener('click', function (e) {
+      if (e.target.getAttribute('data-close')) $('#publish').hidden = true;
+    });
+    $('#segFull').onclick = function () { state.pubMode = 'full'; renderPublish(); };
+    $('#segSnippet').onclick = function () { state.pubMode = 'snippet'; renderPublish(); };
+    $('#pubCopy').onclick = function (e) { doCopy($('#pubOut').value, e.currentTarget, null); };
+    $('#pubDownload').onclick = function () { downloadFile('prompts.js', buildFullFile()); };
 
     window.addEventListener('hashchange', fromHash);
 
@@ -678,6 +972,7 @@
       if (e.key === '/' && !typing) { e.preventDefault(); searchEl.focus(); searchEl.select(); return; }
 
       if (e.key === 'Escape') {
+        if (!$('#publish').hidden) { $('#publish').hidden = true; return; }
         if (!$('#modal').hidden) { closeModal(); return; }
         if (document.activeElement === searchEl && searchEl.value) { $('#clearSearch').click(); return; }
         if (document.body.dataset.view === 'detail' &&
@@ -707,8 +1002,10 @@
   /* -------------------------------- boot -------------------------------- */
 
   function init() {
+    rebuild();
     applyTheme();
     wire();
+    updatePublishBadge();
     renderCategories();
     renderList();
     renderDetail();
