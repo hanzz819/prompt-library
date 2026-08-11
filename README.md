@@ -5,6 +5,7 @@ Plain HTML/CSS/JS — no build step, no dependencies, no server code.
 
 - **Categorised + searchable** — sidebar categories, full-text search across title, tags, description and body
 - **Fill-in fields** — anything written `[IN BRACKETS]` becomes an input; values are remembered per prompt on that device
+- **Gates you can switch off** — every "Do not …" / "Never …" line is detected and listed as a checkbox, all selected by default; clear one and it drops out of the copied prompt without touching the wording in git
 - **One-tap copy** — copy the filled prompt from the card or the detail pane, with a "copy template" option that leaves the brackets in
 - **Multi-device** — responsive down to phone width, installable to a home screen, works offline after the first visit
 - **Write prompts in the app** — a real editor with per-field labels and types; new prompts work immediately, then publish them into `data/prompts.js` when you want them permanent
@@ -166,6 +167,29 @@ a prompt body are safe.
 Because `body` is a JS template literal, a literal backtick must be written
 `` \` `` and a literal `${` must be written `\${`.
 
+### Gates
+
+Gates need no markup either — they are read out of the body. A line counts as a
+gate when it opens with **do not**, **don't** or **never**, and a bullet list
+counts as one gate set when any bullet in it opens that way, or when the `…:`
+line above it does. Each one becomes a checkbox in the detail pane, selected by
+default; clearing it removes that line from the copied prompt and from
+**Copy template**. A `…:` lead-in such as `Never run:` is dropped automatically
+once every bullet under it is cleared, so no dangling header is left behind.
+
+```
+Do not commit anything.          → one gate
+
+Rules:                           → one gate set of three, the "Rules:" header
+- Work only in this worktree.      going too if all three are cleared
+- Do not modify unrelated files.
+- Do not commit yet.
+```
+
+Which gates are off is a per-device preference, like field values — the wording
+in `data/prompts.js` is never rewritten, so the committed prompt stays the full
+strict version for everyone else.
+
 Splitting the library across several files is fine — each file does
 `window.PROMPT_LIBRARY = (window.PROMPT_LIBRARY || []).concat([ ... ]);` and gets
 its own `<script>` tag in `index.html`. One file per category keeps merge
@@ -185,7 +209,7 @@ conflicts away when several people edit at once.
 ```
 index.html                 markup and the script tags
 assets/app.css             all styling, light + dark, responsive
-assets/app.js              search, fields, copy, routing
+assets/app.js              search, fields, gates, copy, routing
 assets/icon.svg            app icon (favicon, manifest)
 assets/apple-touch-icon.png  iOS home screen icon — Safari ignores the manifest
 assets/icon-512.png        Android / desktop install icon
@@ -196,8 +220,8 @@ manifest.webmanifest       home-screen install metadata
 
 ## Notes
 
-- Field values, favourites and theme are stored in `localStorage`, per device
-  and per browser. They are deliberately not committed — the repo holds the
+- Field values, cleared gates, favourites and theme are stored in
+  `localStorage`, per device and per browser. They are deliberately not committed — the repo holds the
   prompts, the device holds your half-typed answers.
 - A blank field stays as `[LIKE THIS]` in the copied text, and the copy toast
   tells you how many are still blank, so nothing goes out silently empty.

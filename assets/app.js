@@ -20,6 +20,7 @@
     theme: 'promptlib.theme',
     local: 'promptlib.local',
     removed: 'promptlib.removed',
+    gates: 'promptlib.gates',
     gh: 'promptlib.gh',
     token: 'promptlib.ghtoken'
   };
@@ -44,6 +45,7 @@
     theme: load(KEY.theme, 'auto'),
     local: load(KEY.local, []),
     removed: load(KEY.removed, []),
+    gatesOff: load(KEY.gates, {}),
     editingId: null,
     pubMode: 'full'
   };
@@ -145,7 +147,7 @@
   // Unfilled slots keep their [BRACKETS] so nothing goes out silently blank.
   function fill(prompt) {
     var vals = valuesFor(prompt);
-    return prompt.body.replace(slotRe(), function (whole, token) {
+    return applyGates(prompt).replace(slotRe(), function (whole, token) {
       if (!isSlot(token)) return whole;
       var v = vals[token];
       return (v != null && String(v).trim() !== '') ? v : whole;
@@ -158,6 +160,150 @@
       if (vals[f.key] != null && String(vals[f.key]).trim() !== '') n++;
     });
     return n;
+  }
+
+  /* -------------------------------- gates ------------------------------- */
+
+  // "Do not commit anything." and friends are the blocking clauses of a
+  // prompt — the gates. They are detected from the body text itself, so
+  // nothing in data/prompts.js has to be marked up, and every one of them can
+  // be switched off for a single prompt without editing the prompt.
+  //
+  // A gate is:
+  //   • a plain line opening with do not / don't / never, or
+  //   • every bullet in a bullet list where at least one bullet opens that way
+  //     (the whole rule set is one switchable set), or
+  //   • every bullet under a "…:" line that itself opens that way, e.g.
+  //     "Never run:" followed by a list of commands.
+  // The "…:" line above such a list is its header: it is dropped only when
+  // every bullet under it is off, so no dangling lead-in is ever left behind.
+
+  var GATE_RE = /^(?:do\s+not|don['’]t|never)\b/i;
+
+  function bulletText(line) {
+    var m = /^\s*[-*]\s+(\S.*?)\s*$/.exec(line);
+    return m ? m[1] : null;
+  }
+
+  function isGateText(text) {
+    return GATE_RE.test(String(text).replace(/^[`*_"“]+/, ''));
+  }
+
+  function gateKey(text) {
+    return String(text).trim().replace(/\s+/g, ' ').toLowerCase();
+  }
+
+  // The "…:" lead-in immediately above a bullet run, skipping blank lines.
+  function headerAbove(lines, start) {
+    for (var i = start - 1; i >= 0 && start - i <= 3; i--) {
+      if (!lines[i].trim()) continue;
+      if (bulletText(lines[i]) !== null) return null;
+      return /:\s*$/.test(lines[i]) && !/^\s*#/.test(lines[i]) ? i : null;
+    }
+    return null;
+  }
+
+  function item(line, text) {
+    return { line: line, text: text, key: gateKey(text) };
+  }
+
+  function parseGates(body) {
+    var lines = body.split('\n'), groups = [], i = 0;
+
+    while (i < lines.length) {
+      if (bulletText(lines[i]) !== null) {
+        var start = i, run = [];
+        while (i < lines.length && bulletText(lines[i]) !== null) {
+          run.push(item(i, bulletText(lines[i])));
+          i++;
+        }
+        var head = headerAbove(lines, start);
+        var seeded = run.some(function (it) { return isGateText(it.text); });
+        var headed = head != null && isGateText(lines[head].trim());
+        if (seeded || headed) {
+          groups.push({ header: head, headerText: head != null ? lines[head].trim() : '', items: run });
+        }
+        continue;
+      }
+
+      var text = lines[i].trim();
+      // a "…:" gate line is a header for the list below it, not an item
+      if (text && isGateText(text) && !/:$/.test(text)) {
+        groups.push({ header: null, headerText: '', items: [item(i, text)] });
+      }
+      i++;
+    }
+    return groups;
+  }
+
+  function gatesOf(prompt) {
+    if (!prompt._gates) prompt._gates = parseGates(prompt.body);
+    return prompt._gates;
+  }
+
+  function gateCount(prompt) {
+    return gatesOf(prompt).reduce(function (n, g) { return n + g.items.length; }, 0);
+  }
+
+  // Absent from storage means on, so a new gate in a published prompt starts
+  // selected on every device.
+  function isGateOn(promptId, key) {
+    var off = state.gatesOff[promptId];
+    return !(off && off.indexOf(key) > -1);
+  }
+
+  function setGate(promptId, key, on) {
+    var off = state.gatesOff[promptId] || [];
+    var at = off.indexOf(key);
+    if (on && at > -1) off.splice(at, 1);
+    if (!on && at === -1) off.push(key);
+    if (off.length) state.gatesOff[promptId] = off;
+    else delete state.gatesOff[promptId];
+    save(KEY.gates, state.gatesOff);
+  }
+
+  function setAllGates(prompt, on) {
+    if (on) { delete state.gatesOff[prompt.id]; }
+    else {
+      var keys = [], seen = {};
+      gatesOf(prompt).forEach(function (g) {
+        g.items.forEach(function (it) { if (!seen[it.key]) { seen[it.key] = 1; keys.push(it.key); } });
+      });
+      state.gatesOff[prompt.id] = keys;
+    }
+    save(KEY.gates, state.gatesOff);
+  }
+
+  function gatesOnCount(prompt) {
+    var n = 0;
+    gatesOf(prompt).forEach(function (g) {
+      g.items.forEach(function (it) { if (isGateOn(prompt.id, it.key)) n++; });
+    });
+    return n;
+  }
+
+  // The body with every switched-off gate line removed. Headers whose whole
+  // set is off go too, and the blank lines they leave behind are collapsed.
+  function applyGates(prompt) {
+    var groups = gatesOf(prompt);
+    if (!groups.length) return prompt.body;
+
+    var drop = {}, any = false;
+    groups.forEach(function (g) {
+      var allOff = true;
+      g.items.forEach(function (it) {
+        if (isGateOn(prompt.id, it.key)) allOff = false;
+        else { drop[it.line] = true; any = true; }
+      });
+      if (allOff && g.header != null) drop[g.header] = true;
+    });
+    if (!any) return prompt.body;
+
+    return prompt.body.split('\n')
+      .filter(function (line, i) { return !drop[i]; })
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/^\n+/, '');
   }
 
   /* ------------------------------- search ------------------------------- */
@@ -393,6 +539,7 @@
       var fieldsLabel = slots.length
         ? filledCount(p) + '/' + slots.length + ' filled'
         : 'no fields';
+      var gatesOff = gateCount(p) - gatesOnCount(p);
 
       card.innerHTML =
         '<div class="card-top"><span class="card-title">' + highlight(p.title) + '</span></div>' +
@@ -400,6 +547,7 @@
         '<div class="card-foot">' +
           '<span class="tag cat-tag">' + esc(p.category) + '</span>' +
           '<span class="tag fields-tag">' + fieldsLabel + '</span>' +
+          (gatesOff ? '<span class="tag gates-tag">' + gatesOff + ' gate' + (gatesOff === 1 ? '' : 's') + ' off</span>' : '') +
           (p._local ? '<span class="tag local-tag">' + (p._override ? 'edited' : 'not in git') + '</span>' : '') +
         '</div>' +
         '<div class="card-actions">' +
@@ -433,6 +581,7 @@
     }
 
     var slots = slotsOf(p);
+    var gates = gatesOf(p);
     var wrap = document.createElement('div');
     wrap.className = 'detail-inner';
 
@@ -455,6 +604,22 @@
         '</div><div class="fields" id="dFields"></div></div>';
     }
 
+    var gatesHtml = '';
+    if (gates.length) {
+      gatesHtml =
+        '<div class="section"><div class="section-head">' +
+          '<h2 class="section-title">Gates</h2>' +
+          '<span class="progress" id="dGateCount"></span>' +
+        '</div>' +
+        '<p class="gates-note">Selected gates go into the prompt. Clear one to drop it ' +
+          'for this prompt only — the wording in git is untouched.</p>' +
+        '<div class="gates" id="dGates"></div>' +
+        '<div class="gates-bulk">' +
+          '<button class="link-btn" id="dGatesAll">Select all</button>' +
+          '<button class="link-btn" id="dGatesNone">Clear all</button>' +
+        '</div></div>';
+    }
+
     var previewHtml =
       '<div class="section"><div class="section-head">' +
         '<h2 class="section-title">Prompt</h2>' +
@@ -468,7 +633,7 @@
         '<button class="btn ghost" id="dShare" title="Copy a direct link to this prompt">Link</button>' +
       '</div>';
 
-    wrap.innerHTML = head + fieldsHtml + previewHtml + actionsHtml;
+    wrap.innerHTML = head + fieldsHtml + gatesHtml + previewHtml + actionsHtml;
     pane.innerHTML = '';
     pane.appendChild(wrap);
     pane.scrollTop = 0;
@@ -518,14 +683,65 @@
       });
     }
 
+    // gates
+    if (gates.length) {
+      var gateHost = wrap.querySelector('#dGates');
+      gates.forEach(function (g) {
+        if (g.headerText) {
+          var h = document.createElement('p');
+          h.className = 'gates-head';
+          h.textContent = g.headerText;
+          gateHost.appendChild(h);
+        }
+        g.items.forEach(function (it) {
+          var lab = document.createElement('label');
+          lab.className = 'gate';
+          lab.dataset.key = it.key;
+
+          var box = document.createElement('input');
+          box.type = 'checkbox';
+          box.checked = isGateOn(p.id, it.key);
+
+          var span = document.createElement('span');
+          span.className = 'gate-text';
+          span.textContent = it.text;
+
+          lab.classList.toggle('on', box.checked);
+          lab.appendChild(box);
+          lab.appendChild(span);
+          gateHost.appendChild(lab);
+
+          box.addEventListener('change', function () {
+            setGate(p.id, it.key, box.checked);
+            // the same wording can appear twice in one body; both follow
+            syncGateBoxes(gateHost, p);
+            updatePreview(p);
+            updateGates(p);
+          });
+        });
+      });
+
+      wrap.querySelector('#dGatesAll').onclick = function () {
+        setAllGates(p, true);
+        syncGateBoxes(gateHost, p);
+        updatePreview(p); updateGates(p);
+      };
+      wrap.querySelector('#dGatesNone').onclick = function () {
+        setAllGates(p, false);
+        syncGateBoxes(gateHost, p);
+        updatePreview(p); updateGates(p);
+      };
+    }
+
     updatePreview(p);
     updateProgress(p);
+    updateGates(p);
 
     wrap.querySelector('#dFav').onclick = function () { toggleFav(p.id); renderDetail(); renderList(); };
     wrap.querySelector('#dEdit').onclick = function () { openEditor(p); };
     wrap.querySelector('#dCopy').onclick = function (e) { doCopy(fill(p), e.currentTarget, p); };
     if (wrap.querySelector('#dCopyRaw')) {
-      wrap.querySelector('#dCopyRaw').onclick = function (e) { doCopy(p.body, e.currentTarget, null); };
+      wrap.querySelector('#dCopyRaw').onclick = function (e) { doCopy(applyGates(p), e.currentTarget, null); };
     }
     if (wrap.querySelector('#dReset')) {
       wrap.querySelector('#dReset').onclick = function () {
@@ -546,11 +762,12 @@
     var el = document.getElementById('dPreview');
     if (!el) return;
     var vals = valuesFor(p);
+    var body = applyGates(p);
     var html = '';
     var last = 0, m, re = slotRe();
-    while ((m = re.exec(p.body)) !== null) {
+    while ((m = re.exec(body)) !== null) {
       if (!isSlot(m[1])) continue;
-      html += esc(p.body.slice(last, m.index));
+      html += esc(body.slice(last, m.index));
       var v = vals[m[1]];
       if (v != null && String(v).trim() !== '') {
         html += '<span class="slot-filled">' + esc(v) + '</span>';
@@ -559,8 +776,42 @@
       }
       last = m.index + m[0].length;
     }
-    html += esc(p.body.slice(last));
+    html += esc(body.slice(last));
     el.innerHTML = html;
+  }
+
+  // Checkbox state is owned by storage, not the DOM, so duplicated wording and
+  // the select-all buttons stay in step.
+  function syncGateBoxes(host, p) {
+    var labels = host.querySelectorAll('.gate');
+    for (var i = 0; i < labels.length; i++) {
+      var on = isGateOn(p.id, labels[i].dataset.key);
+      labels[i].querySelector('input').checked = on;
+      labels[i].classList.toggle('on', on);
+    }
+  }
+
+  function updateGates(p) {
+    var total = gateCount(p);
+    if (!total) return;
+    var on = gatesOnCount(p);
+
+    var el = document.getElementById('dGateCount');
+    if (el) {
+      el.textContent = on + ' of ' + total + ' on';
+      el.classList.toggle('done', on === total);
+    }
+
+    var foot = document.querySelector('.card[data-id="' + p.id + '"] .card-foot');
+    if (!foot) return;
+    var tag = foot.querySelector('.gates-tag'), off = total - on;
+    if (!off) { if (tag) foot.removeChild(tag); return; }
+    if (!tag) {
+      tag = document.createElement('span');
+      tag.className = 'tag gates-tag';
+      foot.insertBefore(tag, foot.querySelector('.local-tag'));
+    }
+    tag.textContent = off + ' gate' + (off === 1 ? '' : 's') + ' off';
   }
 
   function updateProgress(p) {
@@ -796,6 +1047,8 @@
   function forgetValues(id) {
     delete state.values[id];
     save(KEY.values, state.values);
+    delete state.gatesOff[id];
+    save(KEY.gates, state.gatesOff);
     var f = state.favs.indexOf(id);
     if (f > -1) { state.favs.splice(f, 1); save(KEY.favs, state.favs); }
   }

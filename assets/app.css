@@ -277,6 +277,35 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 1
 .progress { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .progress.done { color: var(--ok); }
 
+/* --------------------------------- gates -------------------------------- */
+
+.gates-note { margin: -2px 0 10px; font-size: 12px; color: var(--text-faint); }
+.gates { display: flex; flex-direction: column; gap: 5px; }
+.gates-head {
+  margin: 8px 0 1px; font-size: 12px; font-weight: 600; color: var(--text-dim);
+  font-family: var(--mono);
+}
+.gates-head:first-child { margin-top: 0; }
+
+.gate {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 8px 11px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px; line-height: 1.45;
+}
+.gate:hover { border-color: var(--accent); }
+.gate input { margin: 2px 0 0; accent-color: var(--accent); flex: none; width: 15px; height: 15px; }
+.gate-text { min-width: 0; word-break: break-word; }
+.gate.on { background: var(--accent-soft); border-color: transparent; color: var(--text); }
+.gate:not(.on) { color: var(--text-faint); }
+.gate:not(.on) .gate-text { text-decoration: line-through; text-decoration-thickness: 1px; }
+
+.gates-bulk { display: flex; gap: 4px; margin-top: 8px; }
+.tag.gates-tag { background: var(--warn-soft); color: var(--warn); border-color: transparent; font-weight: 600; }
+
 .preview {
   margin: 0;
   background: var(--bg-elev);
