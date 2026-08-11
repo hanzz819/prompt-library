@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A searchable, fill-in-the-blank prompt library that runs anywhere from a git repo.">
+<meta name="theme-color" content="#0f1115">
+<title>Prompt Library</title>
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="assets/app.css">
+</head>
+<body data-view="list">
+
+<header class="topbar">
+  <button class="icon-btn back-btn" id="backBtn" aria-label="Back to list" title="Back">&#8592;</button>
+
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span class="brand-name">Prompt Library</span>
+  </div>
+
+  <div class="search-wrap">
+    <span class="search-icon" aria-hidden="true">&#9906;</span>
+    <input id="search" type="search" class="search" placeholder="Search prompts…  (press /)"
+           autocomplete="off" spellcheck="false" aria-label="Search prompts">
+    <button class="clear-btn" id="clearSearch" aria-label="Clear search" hidden>&times;</button>
+  </div>
+
+  <div class="topbar-actions">
+    <button class="icon-btn" id="favToggle" aria-pressed="false" title="Show favourites only">&#9734;</button>
+    <button class="icon-btn" id="newBtn" title="Add a new prompt">+</button>
+    <button class="icon-btn" id="themeBtn" title="Toggle theme">&#9681;</button>
+  </div>
+</header>
+
+<main class="app">
+  <!-- categories -->
+  <aside class="sidebar" id="sidebar" aria-label="Categories">
+    <nav class="cats" id="cats"></nav>
+    <div class="sidebar-foot">
+      <p class="hint"><kbd>/</kbd> search &middot; <kbd>&uarr;</kbd><kbd>&darr;</kbd> move &middot; <kbd>Ctrl</kbd>+<kbd>&#9166;</kbd> copy</p>
+    </div>
+  </aside>
+
+  <!-- list -->
+  <section class="list-pane" aria-label="Prompts">
+    <div class="chips-row" id="chipsRow"></div>
+    <div class="list-meta"><span id="resultCount"></span></div>
+    <ul class="list" id="list"></ul>
+    <div class="empty" id="emptyState" hidden>
+      <p class="empty-title">No prompts match</p>
+      <p class="empty-sub">Try a different word, or clear the category filter.</p>
+    </div>
+  </section>
+
+  <!-- detail -->
+  <section class="detail-pane" id="detail" aria-label="Prompt detail" tabindex="-1"></section>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- new / edit prompt generator -->
+<div class="modal" id="modal" hidden>
+  <div class="modal-backdrop" data-close="1"></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-head">
+      <h2 id="modalTitle">Add a prompt</h2>
+      <button class="icon-btn" data-close="1" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-note">
+        Fill this in, copy the generated snippet, and paste it into <code>data/prompts.js</code>.
+        Commit the file and every device gets it on the next pull.
+      </p>
+      <label class="fld"><span>Title</span><input id="npTitle" type="text" placeholder="Verify and close out"></label>
+      <label class="fld"><span>Category</span><input id="npCategory" type="text" list="catList" placeholder="Verify"></label>
+      <datalist id="catList"></datalist>
+      <label class="fld"><span>Tags <em>(comma separated)</em></span><input id="npTags" type="text" placeholder="verification, close-out"></label>
+      <label class="fld"><span>Description</span><textarea id="npDesc" rows="2" placeholder="When to use this prompt."></textarea></label>
+      <label class="fld"><span>Prompt body <em>(wrap fill-ins in [BRACKETS])</em></span><textarea id="npBody" rows="10" placeholder="Do the thing.&#10;&#10;Task:&#10;[TASK]"></textarea></label>
+      <div class="detected" id="npDetected"></div>
+      <label class="fld"><span>Generated snippet</span><textarea id="npOut" rows="10" readonly></textarea></label>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" data-close="1">Close</button>
+      <button class="btn primary" id="npCopy">Copy snippet</button>
+    </div>
+  </div>
+</div>
+
+<script src="data/prompts.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

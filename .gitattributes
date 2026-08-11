@@ -1,0 +1,4 @@
+# Prompt bodies are copied straight to the clipboard — keep line endings LF on
+# every platform so no stray carriage returns end up in a pasted prompt.
+* text=auto eol=lf
+*.svg text eol=lf
