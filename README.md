@@ -54,7 +54,7 @@ The LAN route serves the folder to everything on your network for as long as it
 runs, so use it on a network you trust:
 
 ```bash
-cd "C:\Users\hanse\OneDrive\Desktop\Claude\prompt-library"; python -m http.server 8777 --bind 0.0.0.0
+python -m http.server 8777 --bind 0.0.0.0
 ```
 
 On iOS the copy path matters: Safari ignores `.select()` on a readonly
