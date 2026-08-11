@@ -5,18 +5,8 @@
    Every device gets it on the next load. No build step, no database.
 
    Fields (fill-in-the-blanks) are written [IN SQUARE BRACKETS] inside `body`.
-   They are detected automatically; the optional `fields` map below just gives
-   them nicer labels, input types and defaults.
-
-     id          unique slug — also the shareable #/p/<id> link
-     title       shown in the list
-     category    one bucket per prompt (drives the sidebar)
-     tags        any number, searchable
-     description when to reach for this prompt
-     fields      optional metadata, keyed by the exact bracket text
-                   label, hint, type: 'text' | 'textarea' | 'select',
-                   options: [...] (for select), default, rows
-     body        the prompt itself
+   They are detected automatically; the optional `fields` map just gives them
+   nicer labels, input types and defaults.
 
    Careful: `body` is a JS template literal, so a literal backtick must be
    written \` and a literal ${ must be written \${.
@@ -33,7 +23,7 @@ window.PROMPT_LIBRARY = (window.PROMPT_LIBRARY || []).concat([
   fields: {
     'TASK': { label: 'Approved task', type: 'textarea', hint: 'What you are asking for, in one or two sentences.' },
     'CRITERIA': { label: 'Success criteria', type: 'textarea', hint: 'How you will know it worked.' },
-    'APPROVAL OR NONE': { label: 'Owner approval', type: 'text', default: 'NONE', hint: 'Name the approval, or leave as NONE.' }
+    'APPROVAL OR NONE': { label: 'Owner approval', type: 'text', hint: 'Name the approval, or leave as NONE.', default: 'NONE' }
   },
   body: `Follow the Stable Build Protocol.
 
@@ -83,12 +73,7 @@ Do not begin implementation until the plan is explicit and internally consistent
   tags: ['stable build protocol', 'read-only', 'clarifications', 'plan mode'],
   description: 'Use after you have answered Claude’s questions but before approving implementation. Folds your clarifications into the plan without letting anything be executed.',
   fields: {
-    'PASTE YOUR ANSWERS HERE': {
-      label: 'Clarifications and corrections',
-      type: 'textarea',
-      rows: 8,
-      hint: 'Your answers to Claude’s questions, or corrections to its assumptions.'
-    }
+    'PASTE YOUR ANSWERS HERE': { label: 'Clarifications and corrections', type: 'textarea', hint: 'Your answers to Claude’s questions, or corrections to its assumptions.', rows: 8 }
   },
   body: `For the rest of this planning step:
 
@@ -166,17 +151,8 @@ End with exactly:
   fields: {
     'TASK': { label: 'Original task', type: 'textarea' },
     'CRITERIA': { label: 'Original success criteria', type: 'textarea' },
-    'PASTE THE APPROVED PLAN OR SUMMARIZE IT': {
-      label: 'Original approved plan',
-      type: 'textarea', rows: 8,
-      hint: 'Paste it in full, or summarise it.'
-    },
-    'LIST UPDATES, OR ASK CLAUDE TO DETERMINE THEM FROM THE DIFF': {
-      label: 'Updates already made',
-      type: 'textarea',
-      default: 'Determine them from the diff.',
-      hint: 'List them, or leave the default and let Claude read the diff.'
-    }
+    'PASTE THE APPROVED PLAN OR SUMMARIZE IT': { label: 'Original approved plan', type: 'textarea', hint: 'Paste it in full, or summarise it.', rows: 8 },
+    'LIST UPDATES, OR ASK CLAUDE TO DETERMINE THEM FROM THE DIFF': { label: 'Updates already made', type: 'textarea', hint: 'List them, or leave the default and let Claude read the diff.', default: 'Determine them from the diff.' }
   },
   body: `Pause implementation.
 
@@ -279,7 +255,7 @@ Stop after presenting the revised plan. Wait for approval before continuing impl
   category: 'Implement',
   tags: ['stable build protocol', 'scope control', 'no commit'],
   description: 'Use this only after reviewing and approving Claude’s plan. It activates implementation while keeping the work limited to the approved scope.',
-  body: `The inspection and implementation plan is approved.
+  body: `The inspection and implementation plan is approved. All required permissions are explicitly provided now. 
 
 Proceed with implementation only.
 
@@ -290,11 +266,7 @@ Rules:
 - Work only inside the current worktree.
 - Do not modify unrelated files.
 - Do not introduce new dependencies, services, frameworks, or architecture unless the approved plan explicitly requires them.
-- Do not run live or destructive commands.
-- Do not run railway commands, live sending, production migrations, database resets, repairs, deletions, or credential cleanup.
-- Do not run git add -A or git add ..
 - Do not commit yet.
-- Do not force-push or bypass any guard.
 - Do not silently expand the scope when you discover unrelated issues.
 - Verify stated success criteria has been met
 
@@ -322,7 +294,9 @@ When implementation is finished, do not claim completion yet. Return:
 2. What changed in each file.
 3. Tests or checks already run.
 4. Remaining verification required.
-5. Any unresolved issue or scope concern.`
+5. Any unresolved issue or scope concern.
+
+`
 },
 
 {
@@ -396,169 +370,202 @@ Do not use the words “complete,” “verified,” or “ready” unless the e
 },
 
 {
-  id: 'resumable-build-session-wrap-up',
-  title: 'Resumable Build Session - Wrap Up',
+  id: 'create-a-checkpoint',
+  title: 'Prompt 1 — Create a Checkpoint',
   category: 'Handoff',
   tags: [],
-  description: `You are continuing work from a previous session. The previous session may have stopped mid-step, made partial edits, or left the repository in an uncertain state.
+  description: 'Use this before ending the current session, even if the work is only partially complete.',
+  body: `Create a resumable checkpoint now.
 
-Treat the repository and git state as authoritative. Treat this handoff and previous conversation as context only. Do not assume that any claimed step was completed until you verify it on disk.`,
+Do not make implementation changes.
+Do not commit, stage, deploy, or run live or destructive commands.
+
+Inspect the current repository and report:
+
+## Task
+
+- Original task:
+- Success criteria:
+- Owner approval:
+
+## Current Phase
+
+- Current phase:
+- Step currently in progress:
+- Exact point reached:
+
+## Verified Complete
+
+- Completed steps:
+- Evidence for each completed step:
+- Tests or commands run:
+- Results:
+
+## Partially Complete
+
+For each partially completed item:
+
+- File:
+- Changes already made:
+- Changes still required:
+- Whether the partial change is safe to keep:
+- Recommended next action:
+
+## Not Started
+
+- Remaining approved steps:
+
+## Current Worktree
+
+- Current branch:
+- Current worktree:
+- Modified files:
+- Untracked files:
+- Staged files:
+- Merge conflicts:
+- Related worktrees:
+
+## Verification
+
+- Checks already run:
+- Results:
+- Known baseline failures:
+- Checks still required:
+
+## Scope and Approval
+
+- Approved work remaining:
+- Newly discovered issues:
+- Live or destructive actions still gated:
+- Owner decisions still needed:
+
+## Exact Next Action
+
+State one concrete next action for the next session.
+
+Do not claim the task is complete unless all success criteria and required verification have been satisfied.
+
+End with:
+
+“Checkpoint complete. No new implementation changes were made.”`
+},
+
+{
+  id: 'prompt-2-resume-in-the-next-session',
+  title: 'Prompt 2 — Resume in the Next Session',
+  category: 'Handoff',
+  tags: [],
+  description: 'Paste this at the beginning of the next session along with the checkpoint from Prompt 1.',
   fields: {
-    'PASTE THE ORIGINAL TASK': { label: 'Paste The Original Task', type: 'textarea' },
-    'PASTE THE SUCCESS CRITERIA': { label: 'Paste The Success Criteria', type: 'textarea' },
-    'PASTE THE APPROVAL OR WRITE “NONE”': { label: 'Paste The Approval Or Write “None”', type: 'textarea' },
-    'PASTE THE HANDOFF DETAILS OR WRITE “NONE”': { label: 'Paste The Handoff Details Or Write “None”', type: 'textarea' }
+    'TASK': { label: 'Task', type: 'text' },
+    'CRITERIA': { label: 'Criteria', type: 'text' },
+    'APPROVAL': { label: 'Approval', type: 'text' },
+    'PASTE THE CHECKPOINT HERE': { label: 'Paste The Checkpoint Here', type: 'textarea' }
   },
-  body: `## Task
+  body: `Resume work from the checkpoint below.
 
-Original task:
-[PASTE THE ORIGINAL TASK]
+Treat the repository and git state as authoritative. Treat the checkpoint as context only. Verify every important claim against the actual files and git diff.
 
-Success criteria:
-[PASTE THE SUCCESS CRITERIA]
+## Original Task
 
-Owner approval:
-[PASTE THE APPROVAL OR WRITE “NONE”]
+[TASK]
 
-Previous-session handoff:
-[PASTE THE HANDOFF DETAILS OR WRITE “NONE”]
+## Success Criteria
 
-## Initial safety state
+[CRITERIA]
+
+## Owner Approval
+
+[APPROVAL]
+
+## Previous Checkpoint
+
+[PASTE THE CHECKPOINT HERE]
+
+## Safety Rules
 
 Begin with inspection only.
 
-Do not edit, create, delete, move, rename, reset, restore, stage, commit, deploy, send, migrate, repair, or run destructive commands.
+Do not edit, create, delete, move, rename, reset, restore, stage, commit, deploy, send, migrate, repair, or run destructive commands yet.
 
 Do not run live commands.
-
-Run only safe, read-only inspection commands:
-
-- \`git status --short\`
-- \`git branch --show-current\`
-- \`git worktree list\`
-- \`git diff --stat\`
-- \`git diff\`
-- \`git diff --cached\`
-- Relevant read-only searches and file inspection
 
 Never run:
 
 - \`git add -A\`
 - \`git add .\`
-- Force-push or history rewriting
-- Live \`railway run\` commands
-- Production or staging migrations
-- Database reset, drop, repair, or deletion
-- Live sending or attachment commands
-- Credential cleanup or deletion
+- Force-push or history rewriting.
+- Live \`railway run\` commands.
+- Production or staging migrations.
+- Database reset, drop, repair, or deletion.
+- Live sending or attachment commands.
 
-## Phase 1 — Reconstruct actual state
+## Reconstruct the Current State
 
-Determine and report:
+Inspect and report:
 
 1. Current branch and worktree.
-2. Whether the worktree is clean, partially modified, or conflicted.
-3. Every modified, untracked, staged, or deleted file.
-4. The last relevant commit.
-5. Whether the previous session appears to have completed, partially completed, or not started the task.
-6. Which changes belong to this task.
-7. Which changes appear unrelated or uncertain.
-8. Whether another worktree may contain related work.
-9. Whether any live or destructive action appears to have occurred.
-10. Whether the repository is safe to continue modifying.
+2. \`git status --short\`.
+3. Modified, untracked, staged, deleted, or conflicted files.
+4. Relevant diff.
+5. Whether the checkpoint matches the repository.
+6. What is actually complete.
+7. What is partially complete.
+8. What remains.
+9. Whether any changes appear unrelated.
+10. Whether the worktree is safe to continue.
 
-Inspect the relevant project sources of truth:
+Read the relevant source-of-truth documents, including:
 
 - \`CLAUDE.md\`
 - \`ENVIRONMENT.md\`
 - \`project/plans/NEXT-BUILD-PHASES.md\`
-- \`project/plans/README.md\`
-- \`project/logs/decisions.md\`
-- Relevant architecture, skill, and integration documents
+- Relevant architecture and skill documents
+- Relevant decision records
 
-Do not trust a document’s status statement without comparing it with the actual files, diff, commits, and tests.
-
-## Phase 2 — Reconcile the handoff
-
-Compare the previous-session handoff with the verified repository state.
+## Revised Resume Plan
 
 Return:
 
-### Handoff Claims Confirmed
+### Confirmed Complete
 
-List claims that match the repository and git state.
+List completed work with evidence.
 
-### Handoff Claims Not Confirmed
+### Partially Complete
 
-List claims that are stale, incomplete, contradictory, or not evidenced.
+List partial work, what remains, and whether it is safe to keep.
 
-### Work Already Complete
+### Remaining Approved Work
 
-List each completed task item with evidence.
+List only the work still required for the original task.
 
-### Work Partially Complete
+### Unrelated or Uncertain Changes
 
-For each partially completed item:
+List them without reverting or deleting anything.
 
-- What changed.
-- What remains.
-- Whether the partial change is safe to keep.
-- What verification is required.
-- Whether rollback or owner input is needed.
+### Verification Plan
 
-### Unrelated or Suspicious Changes
+List the exact checks required and their expected success signals.
 
-List changes that do not clearly belong to the approved task. Do not revert or delete them automatically.
+### Gated Actions
 
-### Current Source-of-Truth Status
+List any live, destructive, irreversible, or owner-only actions. Mark them as not approved.
 
-Confirm the current home of:
+### Resume Decision
 
-- Current build state.
-- Historical decisions.
-- Environment mechanisms.
-- Go-live blockers.
-- Detailed procedures.
-- Project commands.
+Classify the state as:
 
-### Wiring Status
+- Safe to continue.
+- Needs a revised plan.
+- Blocked by a conflict.
+- Requires owner approval.
+- Complete pending verification.
 
-For every file that may be changed:
+Do not edit files yet.
 
-- Referenced by:
-- Points to:
-- References already updated:
-- References still stale:
-- Duplicate source of truth detected:
+End with:
 
-## Phase 3 — Resume decision
-
-Do not edit yet.
-
-Based on the verified state, classify the session as one of:
-
-1. Safe to continue the approved task.
-2. Needs a revised plan.
-3. Blocked by a conflict or uncertain change.
-4. Requires owner approval.
-5. Complete pending verification only.
-
-Then provide the smallest safe resume plan.
-
-The resume plan must state:
-
-- Exact remaining steps.
-- Exact files allowed to change.
-- Files that must remain untouched.
-- Commands allowed before verification.
-- Commands that are live or destructive and therefore excluded.
-- Verification required after each step.
-- Whether \`NEXT-BUILD-PHASES.md\` must be updated.
-- Whether a decisions entry is required.
-
-End Phase 3 with:
-
-“Repository state reconstructed. No files were changed. Waiting for approval to resume.”`
+“State reconstructed. No files were changed. Waiting for explicit approval to resume the remaining approved work.”`
 }
 
 ]);
