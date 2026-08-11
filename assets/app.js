@@ -196,16 +196,37 @@
     return new Promise(function (resolve, reject) {
       var ta = document.createElement('textarea');
       ta.value = text;
-      ta.setAttribute('readonly', '');
-      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+      // iOS Safari ignores .select() on a readonly textarea, so the element has
+      // to stay editable and be selected through a Range. 16px avoids the
+      // focus-zoom, and 1px + fixed keeps the page from jumping.
+      ta.contentEditable = 'true';
+      ta.readOnly = false;
+      ta.style.cssText =
+        'position:fixed;top:0;left:0;width:1px;height:1px;padding:0;border:0;' +
+        'outline:0;opacity:0;font-size:16px;';
       document.body.appendChild(ta);
-      ta.select();
-      ta.setSelectionRange(0, ta.value.length);
+
+      selectAll(ta);
+
       var ok = false;
       try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+
+      var sel = window.getSelection();
+      if (sel) sel.removeAllRanges();
       document.body.removeChild(ta);
+
       ok ? resolve() : reject(new Error('copy failed'));
     });
+  }
+
+  // Selects the whole contents of a textarea in a way iOS Safari honours.
+  function selectAll(ta) {
+    var range = document.createRange();
+    range.selectNodeContents(ta);
+    var sel = window.getSelection();
+    if (sel) { sel.removeAllRanges(); sel.addRange(range); }
+    ta.focus();
+    ta.setSelectionRange(0, ta.value.length);
   }
 
   // Last resort: some contexts (insecure origins, locked-down in-app browsers)
@@ -214,15 +235,21 @@
     var old = document.getElementById('copyFallback');
     if (old) old.remove();
 
+    // Touch devices have no Ctrl+C, and a readonly textarea cannot be selected
+    // on iOS — so the box stays editable and the hint matches the input method.
+    var touch = window.matchMedia('(hover: none)').matches;
+    var hint = touch
+      ? 'The text is selected — tap <b>Copy</b> on the selection handle, then <b>Done</b>.'
+      : 'The text is selected — press <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>C</kbd>, then <kbd>Esc</kbd>.';
+
     var wrap = document.createElement('div');
     wrap.id = 'copyFallback';
     wrap.className = 'copy-fallback';
     wrap.innerHTML =
       '<div class="copy-fallback-card">' +
-        '<p class="copy-fallback-note">This browser blocked the clipboard. ' +
-        'The text is selected — press <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>C</kbd>, then <kbd>Esc</kbd>.</p>' +
-        '<textarea readonly></textarea>' +
-        '<button class="btn ghost">Close</button>' +
+        '<p class="copy-fallback-note">This browser blocked the clipboard. ' + hint + '</p>' +
+        '<textarea spellcheck="false"></textarea>' +
+        '<button class="btn ghost">Done</button>' +
       '</div>';
 
     var ta = wrap.querySelector('textarea');
@@ -236,9 +263,7 @@
     document.addEventListener('keydown', onKey);
 
     document.body.appendChild(wrap);
-    ta.focus();
-    ta.select();
-    ta.setSelectionRange(0, ta.value.length);
+    selectAll(ta);
   }
 
   function byId(id) {

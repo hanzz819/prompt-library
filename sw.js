@@ -1,13 +1,15 @@
 /* Offline cache. Network first, so a `git pull` + reload always shows the
    newest prompts; the cache is only a fallback when the device is offline. */
 
-var CACHE = 'prompt-library-v1';
+var CACHE = 'prompt-library-v2';
 var SHELL = [
   './',
   'index.html',
   'assets/app.css',
   'assets/app.js',
   'assets/icon.svg',
+  'assets/apple-touch-icon.png',
+  'assets/icon-512.png',
   'data/prompts.js',
   'manifest.webmanifest'
 ];

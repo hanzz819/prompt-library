@@ -38,6 +38,35 @@ To keep it private, GitHub Pages on a private repo needs a paid plan; the
 alternative is any static host (Netlify, Cloudflare Pages, Vercel) pointed at
 the same repo, or just cloning the repo on each device and opening the file.
 
+## On a phone
+
+Two routes, and they are not equivalent:
+
+| | GitHub Pages / any https host | `http://<pc-lan-ip>:8777` |
+| --- | --- | --- |
+| Needs the PC on | no | yes, same Wi-Fi |
+| Clipboard API | yes | **no** — insecure origin |
+| Copy button | one tap | falls back to `execCommand`, still one tap |
+| Add to home screen | yes, with icon | yes, but reinstall when the IP changes |
+| Offline | yes | no |
+
+The LAN route serves the folder to everything on your network for as long as it
+runs, so use it on a network you trust:
+
+```bash
+cd "C:\Users\hanse\OneDrive\Desktop\Claude\prompt-library"; python -m http.server 8777 --bind 0.0.0.0
+```
+
+On iOS the copy path matters: Safari ignores `.select()` on a readonly
+textarea, so the `execCommand` fallback selects through a `Range` on an
+editable element instead. If a browser refuses both methods, the text appears
+pre-selected in a box with a "tap Copy on the selection handle" prompt, so the
+prompt is always retrievable.
+
+**Add to Home Screen** (Share → Add to Home Screen) gives it an icon and opens
+it without Safari chrome. `apple-touch-icon.png` exists because Safari ignores
+the web manifest's icons.
+
 ## Add or edit a prompt
 
 1. Open `data/prompts.js`
@@ -98,7 +127,9 @@ conflicts away when several people edit at once.
 index.html                 markup and the script tags
 assets/app.css             all styling, light + dark, responsive
 assets/app.js              search, fields, copy, routing
-assets/icon.svg            app icon
+assets/icon.svg            app icon (favicon, manifest)
+assets/apple-touch-icon.png  iOS home screen icon — Safari ignores the manifest
+assets/icon-512.png        Android / desktop install icon
 data/prompts.js            THE LIBRARY — the only file you normally edit
 sw.js                      offline cache (network first)
 manifest.webmanifest       home-screen install metadata

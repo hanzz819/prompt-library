@@ -25,6 +25,8 @@
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, monospace;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --topbar-h: 56px;
+  /* notch allowance, so a home-screen launch does not sit under the status bar */
+  --topbar-total: calc(56px + env(safe-area-inset-top, 0px));
 }
 
 :root[data-theme="light"] { color-scheme: light; }
@@ -99,10 +101,10 @@ kbd {
 
 .topbar {
   position: sticky; top: 0; z-index: 30;
-  height: var(--topbar-h);
+  height: var(--topbar-total);
   display: flex; align-items: center; gap: 10px;
   padding: 0 12px;
-  padding-top: env(safe-area-inset-top);
+  padding-top: env(safe-area-inset-top, 0px);
   background: var(--bg-elev);
   border-bottom: 1px solid var(--line);
 }
@@ -155,7 +157,8 @@ kbd {
 .app {
   display: grid;
   grid-template-columns: 216px minmax(300px, 400px) 1fr;
-  height: calc(100dvh - var(--topbar-h));
+  height: calc(100vh - var(--topbar-total));   /* fallback for iOS < 15.4 */
+  height: calc(100dvh - var(--topbar-total));
 }
 
 .sidebar {
@@ -323,7 +326,7 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 1
 .modal[hidden] { display: none; }
 .modal-backdrop { position: absolute; inset: 0; background: rgba(10, 12, 18, .55); }
 .modal-card {
-  position: relative; width: min(720px, 100%); max-height: 88dvh;
+  position: relative; width: min(720px, 100%); max-height: 88vh; max-height: 88dvh;
   display: flex; flex-direction: column;
   background: var(--bg); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
 }
@@ -347,7 +350,7 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 1
   background: rgba(10, 12, 18, .55);
 }
 .copy-fallback-card {
-  width: min(640px, 100%); max-height: 82dvh;
+  width: min(640px, 100%); max-height: 82vh; max-height: 82dvh;
   display: flex; flex-direction: column; gap: 10px;
   background: var(--bg); border: 1px solid var(--line);
   border-radius: 14px; padding: 16px; box-shadow: var(--shadow);
