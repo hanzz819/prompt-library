@@ -213,7 +213,28 @@ kbd {
 .card-foot { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .card-actions { position: absolute; top: 8px; right: 8px; display: flex; gap: 2px; }
 .card-actions .icon-btn { width: 28px; height: 28px; font-size: 14px; }
-.card-title { padding-right: 62px; }
+.card-title { padding-right: 92px; }
+
+/* ---------------------------- drag to reorder --------------------------- */
+
+/* touch-action keeps a drag off the grip from scrolling the list instead */
+.grip { cursor: grab; touch-action: none; color: var(--text-faint); }
+.grip:active { cursor: grabbing; }
+.drag-gap > .card {
+  opacity: .34;
+  border-style: dashed;
+  border-color: var(--accent);
+  box-shadow: none;
+}
+.drag-ghost {
+  position: fixed; z-index: 60;
+  pointer-events: none;
+  border-color: var(--accent);
+  box-shadow: 0 14px 30px rgba(10, 12, 18, .3);
+  transform: rotate(-0.4deg);
+}
+body.is-dragging { cursor: grabbing; user-select: none; -webkit-user-select: none; }
+body.is-dragging .card:hover { border-color: var(--line); }
 
 .tag {
   font-size: 11px; padding: 2px 7px; border-radius: 999px;

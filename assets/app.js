@@ -21,6 +21,7 @@
     local: 'promptlib.local',
     removed: 'promptlib.removed',
     gates: 'promptlib.gates',
+    order: 'promptlib.order',
     gh: 'promptlib.gh',
     token: 'promptlib.ghtoken'
   };
@@ -46,25 +47,31 @@
     local: load(KEY.local, []),
     removed: load(KEY.removed, []),
     gatesOff: load(KEY.gates, {}),
+    order: load(KEY.order, []),
     editingId: null,
     pubMode: 'full'
   };
 
-  // Merge REPO + LOCAL into PROMPTS. Local entries either override a repo
-  // prompt of the same id (in place) or append as brand new ones. Ids in
-  // state.removed are dropped — a deletion that publishes as a real removal.
-  function rebuild() {
-    var overridden = {};
-    PROMPTS = [];
+  // Merge REPO + LOCAL. Local entries either override a repo prompt of the
+  // same id (in place) or append as brand new ones. Ids in state.removed are
+  // dropped — a deletion that publishes as a real removal.
+  function merged() {
+    var overridden = {}, out = [];
     REPO.forEach(function (p) {
       if (isRemoved(p.id)) return;
       var loc = localById(p.id);
-      if (loc) { overridden[p.id] = true; PROMPTS.push(mark(loc, true)); }
-      else PROMPTS.push(p);
+      if (loc) { overridden[p.id] = true; out.push(mark(loc, true)); }
+      else out.push(p);
     });
     state.local.forEach(function (loc) {
-      if (!overridden[loc.id] && !isRemoved(loc.id)) PROMPTS.push(mark(loc, false));
+      if (!overridden[loc.id] && !isRemoved(loc.id)) out.push(mark(loc, false));
     });
+    return out;
+  }
+
+  // PROMPTS is what the UI renders: the merge, then this device's drag order.
+  function rebuild() {
+    PROMPTS = applyOrder(merged());
   }
 
   function isRemoved(id) { return state.removed.indexOf(id) > -1; }
@@ -87,6 +94,72 @@
     save(KEY.removed, state.removed);
     rebuild();
     updatePublishBadge();
+  }
+
+  /* ------------------------------ ordering ------------------------------ */
+
+  // The library's natural order is the order of data/prompts.js. Dragging a
+  // card does not rewrite that file — it stores a list of ids on this device,
+  // so a reorder behaves like an edit: local until published, at which point
+  // buildFullFile() emits the prompts in this order and every device gets it.
+  //
+  // An id missing from the stored list — a prompt published after the last
+  // drag — sorts after everything that is in it, keeping its own relative
+  // position. Nothing is written back on load, so a prompt deleted and then
+  // restored still finds its old slot.
+
+  function applyOrder(list) {
+    if (!state.order.length) return list;
+    var rank = {}, n = state.order.length;
+    state.order.forEach(function (id, i) { rank[id] = i; });
+    return list
+      .map(function (p, i) { return { p: p, r: rank[p.id] == null ? n + i : rank[p.id] }; })
+      .sort(function (a, b) { return a.r - b.r; })
+      .map(function (x) { return x.p; });
+  }
+
+  function ids(list) { return list.map(function (p) { return p.id; }); }
+
+  // Search results are sorted by relevance, so there is no order to drag into.
+  function canReorder() { return !state.query; }
+
+  function orderChanged() {
+    if (!state.order.length) return false;
+    return ids(merged()).join('\n') !== ids(PROMPTS).join('\n');
+  }
+
+  function setOrder(list) {
+    state.order = list.slice();
+    save(KEY.order, state.order);
+    rebuild();
+    updatePublishBadge();
+  }
+
+  function resetOrder() {
+    setOrder([]);
+    renderCategories();
+    renderList();
+  }
+
+  // Reordering happens inside whatever is on screen, which may be a single
+  // category or the favourites. The visible prompts keep the slots they
+  // already occupy in the full list and are redistributed among them, so
+  // dragging inside a filter never disturbs anything outside it.
+  function commitVisibleOrder(visibleIds) {
+    var all = ids(PROMPTS), inView = {}, slots = [];
+    visibleIds.forEach(function (id) { inView[id] = 1; });
+    all.forEach(function (id, i) { if (inView[id]) slots.push(i); });
+    slots.forEach(function (slot, k) { all[slot] = visibleIds[k]; });
+    setOrder(all);
+  }
+
+  function nudge(id, dir) {
+    var view = ids(visiblePrompts());
+    var from = view.indexOf(id), to = from + dir;
+    if (from < 0 || to < 0 || to >= view.length) return false;
+    view.splice(to, 0, view.splice(from, 1)[0]);
+    commitVisibleOrder(view);
+    return true;
   }
 
   /* --------------------------- fill-in fields --------------------------- */
@@ -526,8 +599,11 @@
 
     $('#emptyState').hidden = list.length > 0;
 
+    var draggable = canReorder();
+
     list.forEach(function (p) {
       var li = document.createElement('li');
+      li.dataset.id = p.id;
       var card = document.createElement('div');
       card.className = 'card';
       card.tabIndex = 0;
@@ -554,10 +630,15 @@
           '<button class="icon-btn" data-act="fav" aria-pressed="' + (isFav(p.id) ? 'true' : 'false') +
             '" title="Favourite">' + (isFav(p.id) ? '★' : '☆') + '</button>' +
           '<button class="icon-btn" data-act="copy" title="Copy this prompt">⧉</button>' +
+          (draggable
+            ? '<button class="icon-btn grip" data-act="drag" aria-label="Reorder ' + esc(p.title) +
+              '" title="Drag to reorder, or focus and press ↑ / ↓">⠿</button>'
+            : '') +
         '</div>';
 
       card.addEventListener('click', function (e) {
         var act = e.target.getAttribute && e.target.getAttribute('data-act');
+        if (act === 'drag') { e.stopPropagation(); return; }
         if (act === 'fav') { e.stopPropagation(); toggleFav(p.id); renderList(); renderDetail(); return; }
         if (act === 'copy') { e.stopPropagation(); doCopy(fill(p), null, p); return; }
         select(p.id);
@@ -566,9 +647,161 @@
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(p.id); }
       });
 
+      var grip = card.querySelector('.grip');
+      if (grip) {
+        grip.addEventListener('pointerdown', function (e) { beginDrag(e, li, p.id); });
+        grip.addEventListener('keydown', function (e) {
+          var dir = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
+          if (!dir) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (nudge(p.id, dir)) { renderCategories(); renderList(); refocusGrip(p.id); }
+        });
+      }
+
       li.appendChild(card);
       ul.appendChild(li);
     });
+  }
+
+  /* --------------------------- drag to reorder -------------------------- */
+
+  // Pointer events rather than HTML5 drag-and-drop, because the same code then
+  // works with a mouse and with a finger — HTML5 dragging does neither on iOS.
+  // The card being moved is lifted into a fixed-position ghost that follows the
+  // pointer; its <li> stays behind as the gap and is moved between the others,
+  // so the drop position is always the one on screen.
+
+  var drag = null;
+
+  function liIds(ul) {
+    var out = [];
+    if (!ul) return out;
+    for (var i = 0; i < ul.children.length; i++) {
+      var id = ul.children[i].dataset.id;
+      if (id) out.push(id);
+    }
+    return out;
+  }
+
+  function refocusGrip(id) {
+    var grip = document.querySelector('.card[data-id="' + id + '"] .grip');
+    if (grip) { grip.focus(); grip.scrollIntoView({ block: 'nearest' }); }
+  }
+
+  function beginDrag(e, li, id) {
+    if (drag || e.button > 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    var card = li.querySelector('.card');
+    var rect = card.getBoundingClientRect();
+    var ghost = card.cloneNode(true);
+    ghost.className = 'card drag-ghost';
+    ghost.style.width = rect.width + 'px';
+    ghost.style.left = rect.left + 'px';
+    ghost.style.top = rect.top + 'px';
+    document.body.appendChild(ghost);
+
+    drag = {
+      id: id,
+      li: li,
+      ghost: ghost,
+      pane: document.querySelector('.list-pane'),
+      grabX: e.clientX - rect.left,
+      grabY: e.clientY - rect.top,
+      x: e.clientX,
+      y: e.clientY,
+      home: li.nextSibling,
+      startIds: liIds(li.parentNode),
+      frame: 0
+    };
+
+    li.classList.add('drag-gap');
+    document.body.classList.add('is-dragging');
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) { /* older Safari */ }
+
+    // Captured pointer events still bubble to the document, so these fire even
+    // once the pointer has left the grip.
+    document.addEventListener('pointermove', onDragMove);
+    document.addEventListener('pointerup', endDrag);
+    document.addEventListener('pointercancel', cancelDrag);
+    document.addEventListener('keydown', onDragKey, true);
+    drag.frame = requestAnimationFrame(dragTick);
+  }
+
+  function onDragMove(e) {
+    if (!drag) return;
+    e.preventDefault();
+    drag.x = e.clientX;
+    drag.y = e.clientY;
+  }
+
+  function dragTick() {
+    if (!drag) return;
+    drag.ghost.style.left = (drag.x - drag.grabX) + 'px';
+    drag.ghost.style.top = (drag.y - drag.grabY) + 'px';
+    autoScroll();
+    placeGap();
+    drag.frame = requestAnimationFrame(dragTick);
+  }
+
+  // Held near either end of the list this keeps scrolling, which a scroll
+  // driven off pointermove cannot do: a still pointer fires no events.
+  function autoScroll() {
+    var pane = drag.pane;
+    if (!pane) return;
+    var r = pane.getBoundingClientRect(), edge = 56;
+    if (drag.y < r.top + edge) pane.scrollTop -= Math.min(18, (r.top + edge - drag.y) / 3);
+    else if (drag.y > r.bottom - edge) pane.scrollTop += Math.min(18, (drag.y - (r.bottom - edge)) / 3);
+  }
+
+  function placeGap() {
+    var ul = drag.li.parentNode;
+    if (!ul) return;
+    var before = null;
+    for (var i = 0; i < ul.children.length; i++) {
+      var kid = ul.children[i];
+      if (kid === drag.li) continue;
+      var r = kid.getBoundingClientRect();
+      if (drag.y < r.top + r.height / 2) { before = kid; break; }
+    }
+    if (before !== drag.li.nextSibling) ul.insertBefore(drag.li, before);
+  }
+
+  function endDrag() {
+    if (!drag) return;
+    var id = drag.id, was = drag.startIds, now = liIds(drag.li.parentNode);
+    stopDrag();
+    if (now.length && now.join('\n') !== was.join('\n')) {
+      commitVisibleOrder(now);
+      renderCategories();
+      renderList();
+    }
+    refocusGrip(id);
+  }
+
+  function cancelDrag() {
+    if (!drag) return;
+    var ul = drag.li.parentNode;
+    if (ul) ul.insertBefore(drag.li, drag.home);   // only drag.li ever moved
+    stopDrag();
+  }
+
+  function onDragKey(e) {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelDrag(); }
+  }
+
+  function stopDrag() {
+    cancelAnimationFrame(drag.frame);
+    drag.ghost.remove();
+    drag.li.classList.remove('drag-gap');
+    document.body.classList.remove('is-dragging');
+    document.removeEventListener('pointermove', onDragMove);
+    document.removeEventListener('pointerup', endDrag);
+    document.removeEventListener('pointercancel', cancelDrag);
+    document.removeEventListener('keydown', onDragKey, true);
+    drag = null;
   }
 
   function renderDetail() {
@@ -1160,7 +1393,9 @@
   }
 
   function pendingCount() {
-    return PROMPTS.filter(function (p) { return p._local; }).length + state.removed.length;
+    return PROMPTS.filter(function (p) { return p._local; }).length +
+      state.removed.length +
+      (orderChanged() ? 1 : 0);
   }
 
   function updatePublishBadge() {
@@ -1198,6 +1433,11 @@
         '<span class="pub-name">' + esc(was ? was.title : id) + '</span>' +
         '<button class="link-btn" data-restore="' + esc(id) + '">Undo</button></div>');
     });
+    if (orderChanged()) {
+      rows.push('<div class="pub-item"><span class="tag warn-tag">reordered</span>' +
+        '<span class="pub-name">The prompts are in a different order on this device</span>' +
+        '<button class="link-btn" data-resetorder="1">Reset</button></div>');
+    }
     $('#pubList').innerHTML = rows.join('');
 
     var full = state.pubMode === 'full';
@@ -1206,7 +1446,12 @@
     $('#segNote').innerHTML = full
       ? 'The complete file, every prompt included. <b>Replace</b> <code>data/prompts.js</code> with this.'
       : 'Only what this device added. <b>Paste</b> it just above the closing <code>]);</code>.' +
-        (state.removed.length ? ' <b>Deletions are not in this mode</b> — use the whole file for those.' : '');
+        (state.removed.length || orderChanged()
+          ? ' <b>' +
+            (state.removed.length && orderChanged() ? 'Deletions and reordering are'
+              : state.removed.length ? 'Deletions are' : 'Reordering is') +
+            ' not in this mode</b> — use the whole file instead.'
+          : '');
 
     $('#pubOut').value = full ? buildFullFile() : (buildAdditions() || '(nothing added on this device)');
     $('#pubDownload').hidden = !full;
@@ -1427,6 +1672,9 @@
 
     $('#publish').addEventListener('click', function (e) {
       if (e.target.getAttribute('data-close')) { $('#publish').hidden = true; return; }
+      if (e.target.getAttribute && e.target.getAttribute('data-resetorder')) {
+        resetOrder(); renderPublish(); toast('Back to the order in data/prompts.js'); return;
+      }
       var restore = e.target.getAttribute && e.target.getAttribute('data-restore');
       if (restore) restoreRemoved(restore);
     });

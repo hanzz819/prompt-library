@@ -91,6 +91,23 @@ Any prompt can be edited or deleted with the **✎** button in its detail pane:
 Everything written this way lives in `localStorage` and is counted by the badge
 on the publish button. It exists only in that browser until published.
 
+### Reordering
+
+Every card carries a **⠿** grip. Drag it to move that prompt, with a mouse or a
+finger — the list opens a gap where it will land, the edges of the list scroll
+when you hold near them, and `Esc` mid-drag puts it back. Focus the grip and
+press `↑` / `↓` to do the same from the keyboard.
+
+Dragging inside a category or the favourites view only shuffles what you can
+see: those prompts keep the slots they already hold in the full list, so the
+rest of the library never moves. The grips disappear while a search is running,
+because search results are ordered by relevance, not by you.
+
+Like an edit, a reorder is device-only until it is published — it counts on the
+publish badge and shows as **reordered**, with a **Reset** that puts the library
+back in the order `data/prompts.js` has. Publishing rewrites the whole file in
+the new order, so it has to be the **Whole prompts.js** form, not the snippet.
+
 ### Getting them into git
 
 **↑** in the toolbar (badged with how many prompts are device-only) opens the
@@ -201,15 +218,16 @@ conflicts away when several people edit at once.
 | --- | --- |
 | `/` | Focus search |
 | `↑` `↓` | Move through results |
+| `↑` `↓` on a **⠿** grip | Move that prompt up or down the list |
 | `Ctrl`/`⌘` + `Enter` | Copy the selected prompt |
-| `Esc` | Clear search, close dialog, back to the list |
+| `Esc` | Cancel a drag, clear search, close dialog, back to the list |
 
 ## Layout
 
 ```
 index.html                 markup and the script tags
 assets/app.css             all styling, light + dark, responsive
-assets/app.js              search, fields, gates, copy, routing
+assets/app.js              search, fields, gates, reordering, copy, routing
 assets/icon.svg            app icon (favicon, manifest)
 assets/apple-touch-icon.png  iOS home screen icon — Safari ignores the manifest
 assets/icon-512.png        Android / desktop install icon
@@ -223,6 +241,9 @@ manifest.webmanifest       home-screen install metadata
 - Field values, cleared gates, favourites and theme are stored in
   `localStorage`, per device and per browser. They are deliberately not committed — the repo holds the
   prompts, the device holds your half-typed answers.
+- A drag order is stored the same way, but it is *not* meant to stay there: it
+  is listed as pending on the publish button, because the order every device
+  sees is the order of the array in `data/prompts.js`.
 - A blank field stays as `[LIKE THIS]` in the copied text, and the copy toast
   tells you how many are still blank, so nothing goes out silently empty.
 - `#/p/<id>` links straight to a prompt — the **Link** button copies one.
