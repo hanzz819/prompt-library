@@ -566,6 +566,195 @@ Do not edit files yet.
 End with:
 
 “State reconstructed. No files were changed. Waiting for explicit approval to resume the remaining approved work.”`
+},
+
+{
+  id: 'general',
+  title: 'General',
+  category: 'Add-On',
+  tags: [],
+  description: 'Clarify with cards',
+  body: `Ask in simple cards with recommended top 2 options, with context and clear and brief explanation with pros and cons of the top answers`
+},
+
+{
+  id: 'start-new-session-continued-from-handoff',
+  title: 'Start New Session Continued From Handoff/QA',
+  category: 'Handoff',
+  tags: ['Start New Session'],
+  body: `Start build from last handoff, i want the final product to be assess by a separate QA which assesses its final accurate and functionality and gives a simple summarized point form report, assess accuracy against the original plan, and summarize where matches and where deviates and where is ambiguous. Any questiosn required answer from the user ask in simple questions with explained brief but important context, give best 2 options with pros and cons of each.`
+},
+
+{
+  id: 'qa-test-suite',
+  title: 'QA Test Suite',
+  category: 'QA',
+  tags: [],
+  body: `I want the final product to be assess by a separate QA which assesses its final accurate and functionality and gives a simple summarized point form report, assess accuracy against the original plan, and summarize where matches and where deviates and where is ambiguous. Any questiosn required answer from the user ask in simple questions with explained brief but important context, give best 2 options with pros and cons of each.`
+},
+
+{
+  id: 'check-current-project-location',
+  title: 'Project Location & Status Snapshot',
+  category: 'Git',
+  tags: ['git', 'location', 'powershell'],
+  description: 'Shows my current folder, Git root, branch, and file status.',
+  body: `Write-Host "\`nCURRENT FOLDER:"
+(Get-Location).Path
+
+Write-Host "\`nGIT REPOSITORY ROOT:"
+git rev-parse --show-toplevel
+
+Write-Host "\`nCURRENT BRANCH:"
+git branch --show-current
+
+Write-Host "\`nFILE STATUS:"
+git status`
+},
+
+{
+  id: 'git-add-one-file',
+  title: 'Git Add One File',
+  category: 'Git',
+  tags: ['add', 'stage', 'file', 'safe'],
+  description: 'Stages one selected file for commit.',
+  fields: {
+    'FILE_PATH': { label: 'File_path', type: 'text' }
+  },
+  body: `Write-Host "\`n[1] ADD ONE FILE"
+Write-Host "Stages the selected file."
+git add "[FILE_PATH]"`
+},
+
+{
+  id: 'git-add-one-folder',
+  title: 'Git Add One Folder',
+  category: 'Git',
+  tags: ['add', 'stage', 'folder', 'directory'],
+  description: 'Stages changes inside one selected folder.',
+  fields: {
+    'FOLDER_PATH': { label: 'Folder_path', type: 'text' }
+  },
+  body: `Write-Host "\`n[2] ADD ONE FOLDER"
+Write-Host "Stages changes inside the selected folder."
+git add "[FOLDER_PATH]"`
+},
+
+{
+  id: 'git-add-current-folder',
+  title: 'Git Add Current Folder',
+  category: 'Git',
+  tags: ['add', 'stage', 'current folder', 'period'],
+  description: 'Stages changes below the current folder.',
+  body: `Write-Host "\`n[3] ADD CURRENT FOLDER"
+Write-Host "Stages changes inside the current folder."
+git add .`
+},
+
+{
+  id: 'git-add-everything-warning',
+  title: 'Git Add Everything (WARNING)',
+  category: 'Git',
+  tags: ['add all', 'stage all', 'warning', 'deleted files'],
+  description: 'Stages every new, modified, and deleted file.',
+  fields: {
+    'CONFIRMATION': { label: 'Confirmation', type: 'text' }
+  },
+  body: `Write-Host "\`n[4] ADD EVERYTHING"
+Write-Host "WARNING: This stages all new, modified, and deleted files."
+git status
+$CONFIRMATION = "[CONFIRMATION]"
+if ($CONFIRMATION -eq "YES") {
+    git add -A
+    git status
+} else {
+    Write-Host "Skipped git add -A"
+}`
+},
+
+{
+  id: 'git-commit-with-message',
+  title: 'Git Review Staged Changes',
+  category: 'Git',
+  tags: ['diff', 'staged', 'review', 'before commit'],
+  description: 'Shows exactly what will be committed.',
+  body: `Write-Host "\`n[7] REVIEW STAGED CHANGES"
+Write-Host "Shows exactly what will be included in the next commit."
+git diff --cached`
+},
+
+{
+  id: 'git-commit-with-message-2',
+  title: 'Git Commit With Message',
+  category: 'Git',
+  tags: ['commit', 'message', 'save', 'checkpoint'],
+  description: 'Saves staged changes as a local commit.',
+  fields: {
+    'COMMIT_MESSAGE': { label: 'Commit_message', type: 'text' }
+  },
+  body: `Write-Host "\`n[5] COMMIT CHANGES"
+Write-Host "Saves staged changes as a local checkpoint."
+git commit -m "[COMMIT_MESSAGE]"`
+},
+
+{
+  id: 'git-view-commit-history',
+  title: 'Git View Commit History',
+  category: 'Git',
+  tags: ['log', 'history', 'commits', 'records'],
+  description: 'Shows recent commits.',
+  body: `Write-Host "\`n[8] COMMIT HISTORY"
+Write-Host "Shows the five most recent commits."
+git log --oneline -5`
+},
+
+{
+  id: 'git-push-to-github',
+  title: 'Git Push To GitHub',
+  category: 'Git',
+  tags: ['push', 'upload', 'GitHub', 'remote'],
+  description: 'Uploads local commits to GitHub.',
+  body: `Write-Host "\`n[10] PUSH TO GITHUB"
+Write-Host "Uploads local commits to GitHub."
+git push`
+},
+
+{
+  id: 'git-pull-from-github',
+  title: 'Git Pull From GitHub',
+  category: 'Git',
+  tags: ['pull', 'download', 'GitHub', 'sync'],
+  description: 'Downloads changes from GitHub.',
+  body: `Write-Host "\`n[11] PULL FROM GITHUB"
+Write-Host "Downloads and integrates changes from GitHub."
+git pull`
+},
+
+{
+  id: 'git-undo-staging',
+  title: 'Git Undo Staging',
+  category: 'Git',
+  tags: ['unstage', 'undo', 'staged', 'restore'],
+  description: 'Removes a file from staging without deleting it.',
+  fields: {
+    'FILE_PATH': { label: 'File_path', type: 'text' }
+  },
+  body: `Write-Host "\`n[12] UNSTAGE ONE FILE"
+Write-Host "Removes the file from staging but keeps your changes."
+git restore --staged "[FILE_PATH]"`
+},
+
+{
+  id: 'git-safe-commit-review',
+  title: 'Git Safe Commit Review',
+  category: 'Git',
+  tags: ['safe commit', 'review', 'status', 'diff'],
+  description: 'Reviews changes before committing.',
+  body: `Write-Host "\`n[13] SAFE COMMIT REVIEW"
+Write-Host "Reviews your files before creating a commit."
+git status
+git diff
+git diff --cached`
 }
 
 ]);
