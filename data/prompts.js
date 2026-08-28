@@ -755,6 +755,42 @@ Write-Host "Reviews your files before creating a commit."
 git status
 git diff
 git diff --cached`
+},
+
+{
+  id: 'session-record-close-out',
+  title: 'Session Record Close-Out',
+  category: 'Handoff',
+  tags: ['session-record', 'transcript', 'handoff', 'close-out', 'skill'],
+  description: 'End a Claude Code session with a permanent, time-stamped record in the project via the /session-record skill: context check against the previous record, run the skill, fill the narrative, verify, commit and push.',
+  fields: {
+    'SESSION TITLE': { label: 'Session title', type: 'text', hint: 'Short kebab-case name for what this session was about, e.g. pricing-model-and-dashboard.' }
+  },
+  body: `Close out this session with a permanent record, then hand off.
+
+1. CONTEXT CHECK FIRST. Look in this project for sessions/README.md. If it exists, read the newest record's SUMMARY.md (Summary, Decisions & rulings, Next steps) and confirm in one paragraph what the last session left pending and whether anything in this session changed it. If no records exist, say so.
+
+2. RUN THE SKILL. Invoke /session-record with the title "[SESSION TITLE]". It creates sessions/<YYYY-MM-DD_HHMM>_<title>/ with SUMMARY.md, transcript.md, and a local-only raw JSONL.
+
+3. FILL THE NARRATIVE in SUMMARY.md - concrete, from the transcript, no fluff:
+   - Summary: what was built/decided/learned, in the order it happened, with the key numbers.
+   - Decisions & rulings: every owner ruling made this session, each with its id if the project uses one, one line each.
+   - Next steps / open items: exactly what is pending, who owes it, and the first action for the next session. Point to the project's registry rather than restating it.
+
+4. VERIFY: the record folder exists, the index line is in sessions/README.md, the raw .jsonl is gitignored, the working tree is otherwise clean, and every commit from this session is pushed.
+
+5. COMMIT + PUSH the record in one commit titled "Session record: [SESSION TITLE]", then reply with: the record path, the session window and duration, the number of commits and files touched, and the three most important things the next session must know.
+
+Rules: never edit an older record; never include secrets or credentials in the record; keep the transcript inside the repo's confidentiality tier (do not publish it).`
+},
+
+{
+  id: 'session-start-context-brief',
+  title: 'Session Start Context Brief',
+  category: 'Handoff',
+  tags: ['session-record', 'start here', 'context', 'handoff'],
+  description: 'Open a Claude Code session by loading the previous session record and getting a five-line brief before any work starts.',
+  body: `Before doing anything else: read sessions/README.md in this project, open the newest record's SUMMARY.md, and brief me in five lines on (1) what was built last time, (2) the open items and who owes them, (3) the first action recommended, (4) any decisions I ruled that constrain today, (5) whether the working tree and remote are clean. Then wait for my instruction.`
 }
 
 ]);
